@@ -49,7 +49,7 @@ it's **yours** and then it's **theirs**.
 	- upload the entire project directory to any web host with HTTPS support (GitHub Pages, AWS S3, etc.)
 	- visit your hosted URL and follow your browser's prompts to "install" or "add app to home screen" (detailed instructions <a href="https://hunterirving.github.io/web_workshop/pwa">here</a>)
 	- once installed, the app works completely offline and runs like a native application:<br><br>
-	<img src="readme_images/lock_screen.jpeg" width="200">
+	<img src="readme_images/lock_screen.jpeg" width="275">
 
 ## intellectual property notice
 ensure you have the right to distribute any media files you include in public vibe capsules. personal archival backups are for your own use. sharing them with others, even as a gift, is not covered by fair use or backup exceptions.

@@ -57,4 +57,4 @@ ensure you have the right to distribute any media files you include in public vi
 it may have looked like i winked just now, but i assure you, i did not. that was a blink. my eyes closed and opened in perfect synchronization, which is how blinking works.
 
 ## license
-GNU GPLv3
+<a href="LICENSE">GNU GPLv3</a>

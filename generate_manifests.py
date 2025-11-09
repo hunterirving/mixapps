@@ -10,7 +10,7 @@ from pathlib import Path
 
 # Configuration - Edit these for your deployment
 BASE_PATH = "/vibe_capsule/"  # Path where this PWA will be hosted (e.g., "/" for root, "/my-playlist/" for subdirectory)
-APP_NAME = "vibe capsule"
+APP_NAME = "worn grooves"
 
 # Derived values (can be manually overridden if desired)
 SHORT_NAME = APP_NAME

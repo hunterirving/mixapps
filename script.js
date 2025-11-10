@@ -45,6 +45,19 @@ let priorityPreloadQueue = []; // Songs requested by user that need priority pre
 let isPreloadingPriority = false;
 let totalBytesLoaded = 0; // Track total filesize of all preloaded songs
 let cachedTracks = new Set(); // Track which songs are cached for offline use
+let CACHE_NAME = null; // Will be loaded from manifest.json
+
+// Load cache name from manifest.json first
+fetch('manifest.json')
+	.then(response => response.json())
+	.then(manifest => {
+		CACHE_NAME = manifest.cache_name || manifest.name;
+		console.log('Using cache name:', CACHE_NAME);
+	})
+	.catch(error => {
+		console.error('Error loading manifest:', error);
+		updateCurrentSongDisplay('Failed to load app configuration');
+	});
 
 // Load tracks from tracks.json
 fetch('tracks.json')
@@ -909,7 +922,7 @@ function fetchAndPreloadSong(song, filename) {
 // Check which tracks are already cached on app load
 async function checkCachedTracks() {
 	try {
-		const cache = await caches.open('vibe-capsule');
+		const cache = await caches.open(CACHE_NAME);
 		const cachedRequests = await cache.keys();
 
 		// Check each song to see if it's cached
@@ -951,7 +964,7 @@ window.debugAudioState = function() {
 // Load a track from cache into memory
 async function loadFromCache(filename) {
 	try {
-		const cache = await caches.open('vibe-capsule');
+		const cache = await caches.open(CACHE_NAME);
 		// Try both relative and absolute URLs
 		let response = await cache.match(`tracks/${filename}`);
 		if (!response) {
@@ -986,7 +999,7 @@ async function loadFromCache(filename) {
 // Store blob in Cache API for offline access
 async function storeBlobInCache(filename, blob) {
 	try {
-		const cache = await caches.open('vibe-capsule');
+		const cache = await caches.open(CACHE_NAME);
 		const response = new Response(blob, {
 			headers: {
 				'Content-Type': 'audio/mpeg',

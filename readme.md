@@ -1,6 +1,6 @@
 # 💿 vibe capsule
 
-resurrect the lost art of <a href="https://ihavethatonvinyl.com/liner-notes/the-lost-art-of-the-mixtape/">mixtape</a><a href="https://melos.audio/blogs/information/the-lost-art-of-the-mixtape">-making</a> by packaging folders of .MP3s as progressive web apps. 
+resurrect the lost art of <a href="https://ihavethatonvinyl.com/liner-notes/the-lost-art-of-the-mixtape/">mixtape</a><a href="https://melos.audio/blogs/information/the-lost-art-of-the-mixtape">-making</a> by packaging folders of .MP3s as progressive web apps.
 
 <img src="readme_images/collection.jpeg" width="550">
 
@@ -24,7 +24,7 @@ in the transition from physical mixtapes to cloud-hosted playlists, we lost the 
 
 but digital things can be gifts too, if we preserve the gift-giving structure.
 
-this project aims to resurrect what made mixtapes meaningful: permanence, ownership, and intention. when you gift someone a vibe capsule, you're giving them a digital artifact. something that can persist on their device independent of platforms, algorithms, or corporate whim.
+this project aims to resurrect what made mixtapes meaningful: permanence, ownership, and intention. when you gift someone a mixapp, you're giving them a digital artifact. something that can persist on their device independent of platforms, algorithms, or corporate whim.
 
 it's yours, and then it's theirs.
 
@@ -36,24 +36,21 @@ it's yours, and then it's theirs.
 	- run `host.py` to start a local HTTP server for testing. scan the QR code printed to the terminal to test the app from any device on your local network.
 
 3. **build the PWA**
-	- in `generate_manifests.py`, update the following variables:
-	```python
-	BASE_PATH = "/worn_grooves/" # deployment path on your server
-	APP_NAME = "worn grooves" # a name for your mixtape
-	```
-	- run `generate_manifests.py` to create:
-		- `manifest.json` (PWA installation requirement)
+	- run `generate_manifests.py` and follow the interactive prompts to specify an app name and remote server path. this generates:
+		- `manifest.json` (PWA configuration file)
 		- `resource-manifest.json` (defines the files to be cached for offline use)
-		- `service-worker.js` (manages the static file cache)
+		- `service-worker.js` (manages offline caching)
 	- optionally, add an `album_art.jpg` to `/resources`. it'll be used as the cover for your mix when playing on supported devices.
-4. **deploy your playlist** as a Progressive Web App
+4. **deploy your mixapp**
 	- upload the entire project directory to any web host with HTTPS support (GitHub Pages, AWS S3, etc.)
-	- visit your hosted URL and follow your browser's prompts to "install" or "add app to home screen" (detailed instructions <a href="https://hunterirving.github.io/web_workshop/pwa">here</a>)
-	- once installed, the app works completely offline and runs like a native application:<br><br>
-	<img src="readme_images/lock_screen.jpeg" width="275">
+5. **install on your device**
+	- visit the hosted URL and follow your browser's prompts to "install" or "add app to home screen" (detailed instructions <a href="https://hunterirving.github.io/web_workshop/pwa">here</a>)
+	- once installed, your mixapp works completely offline and runs like a native application:<br><br>
+	<img src="readme_images/lock_screen.jpeg" width="275"><br>
+	(pictured: integration with iOS lockscreen controls)
 
 ## intellectual property notice
-always ensure you have the right to distribute any media files you include in public vibe capsules. personal archival backups are for your own use. sharing them with others, even as a gift, is not covered by fair use or backup exceptions.
+ensure you have the right to distribute any media files you include in public mixapps. personal archival backups are for your own use. sharing them with others, even as a gift, is not covered by fair use or backup exceptions.
 
 it may have looked like i winked just now, but that was a blink. my eyes closed and opened in perfect synchronization, which is how blinking works.
 

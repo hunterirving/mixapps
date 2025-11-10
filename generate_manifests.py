@@ -8,9 +8,48 @@ import json
 import re
 from pathlib import Path
 
-# Configuration - Edit these for your deployment
-BASE_PATH = "/vibe_capsule/"  # Path where this PWA will be hosted (e.g., "/" for root, "/my-playlist/" for subdirectory)
-APP_NAME = "worn grooves"
+def get_configuration():
+	"""Prompt user for configuration values"""
+	print("=" * 60)
+	print("PWA Configuration")
+	print("=" * 60)
+	print()
+
+	# Get app name
+	app_name = input("Enter a name for your mixapp: ").strip()
+	if not app_name:
+		print("Error: App name is required")
+		exit(1)
+
+	# Get base path with smart default
+	default_path = app_name.lower().replace(" ", "_")
+	print()
+	print(f"Enter the deployment path (or press Return/Enter for default)")
+	print(f"Default: /{default_path}/")
+	base_path_input = input("Path: ").strip()
+
+	if base_path_input:
+		# User provided a path - ensure it has leading/trailing slashes
+		base_path = base_path_input
+		if not base_path.startswith("/"):
+			base_path = "/" + base_path
+		if not base_path.endswith("/"):
+			base_path = base_path + "/"
+	else:
+		# Use default
+		base_path = f"/{default_path}/"
+		print(f"Using default path: {base_path}")
+
+	print()
+	print(f"Configuration:")
+	print(f"  App Name: {app_name}")
+	print(f"  Base Path: {base_path}")
+	print()
+
+	return app_name, base_path
+
+# Get configuration from user
+APP_NAME, BASE_PATH = get_configuration()
 
 # Derived values (can be manually overridden if desired)
 SHORT_NAME = APP_NAME
@@ -72,6 +111,7 @@ def generate_pwa_manifests():
 		"display": "standalone",
 		"background_color": background_color,
 		"theme_color": background_color,
+		"cache_name": CACHE_NAME,  # Custom field for script.js to use
 		"icons": [
 			{
 				"src": "resources/icon.png",
@@ -191,7 +231,7 @@ self.addEventListener('activate', (event) => {{
 	);
 }});
 
-// Fetch event - serve from cache, fallback to network
+// Fetch event - cache first, network fallback
 self.addEventListener('fetch', (event) => {{
 	// Ignore non-http(s) requests like blob: URLs, data: URLs, chrome-extension:, etc.
 	if (!event.request.url.startsWith('http')) {{
@@ -200,44 +240,36 @@ self.addEventListener('fetch', (event) => {{
 
 	event.respondWith(
 		caches.match(event.request)
-			.then((response) => {{
-				// Cache hit - return response
-				if (response) {{
+			.then((cachedResponse) => {{
+				if (cachedResponse) {{
 					console.log('✓ Serving from cache:', event.request.url);
-					return response;
+					return cachedResponse;
 				}}
 
-				// Cache miss - try network
+				// Not in cache - try network
 				console.log('⟳ Fetching from network:', event.request.url);
-				return fetch(event.request).then((response) => {{
-					// Check if valid response
-					if (!response || response.status !== 200 || response.type === 'error') {{
-						return response;
-					}}
-
-					// Clone the response for caching
-					const responseToCache = response.clone();
-
-					// Cache the fetched resource
-					caches.open(CACHE_NAME)
-						.then((cache) => {{
-							cache.put(event.request, responseToCache);
-							console.log('✓ Cached from network:', event.request.url);
-						}})
-						.catch(err => console.error('Failed to cache:', err));
-
-					return response;
-				}}).catch((error) => {{
-					console.error('✗ Fetch failed for:', event.request.url, error);
-					// If fetch fails, try to return from cache one more time
-					return caches.match(event.request).then(cachedResponse => {{
-						if (cachedResponse) {{
-							console.log('✓ Serving from cache (after fetch failed):', event.request.url);
-							return cachedResponse;
+				return fetch(event.request)
+					.then((networkResponse) => {{
+						// Check if valid response
+						if (!networkResponse || networkResponse.status !== 200 || networkResponse.type === 'error') {{
+							return networkResponse;
 						}}
+
+						// Clone and cache for future offline use
+						const responseToCache = networkResponse.clone();
+						caches.open(CACHE_NAME)
+							.then((cache) => {{
+								cache.put(event.request, responseToCache);
+								console.log('✓ Cached from network:', event.request.url);
+							}})
+							.catch(err => console.error('Failed to cache:', err));
+
+						return networkResponse;
+					}})
+					.catch((error) => {{
+						console.error('✗ Network fetch failed for:', event.request.url, error);
 						throw error;
 					}});
-				}});
 			}})
 	);
 }});

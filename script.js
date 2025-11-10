@@ -47,20 +47,16 @@ let totalBytesLoaded = 0; // Track total filesize of all preloaded songs
 let cachedTracks = new Set(); // Track which songs are cached for offline use
 let CACHE_NAME = null; // Will be loaded from manifest.json
 
-// Load cache name from manifest.json first
+// Load cache name from manifest.json first, then load tracks
 fetch('manifest.json')
 	.then(response => response.json())
 	.then(manifest => {
 		CACHE_NAME = manifest.cache_name || manifest.name;
 		console.log('Using cache name:', CACHE_NAME);
-	})
-	.catch(error => {
-		console.error('Error loading manifest:', error);
-		updateCurrentSongDisplay('Failed to load app configuration');
-	});
 
-// Load tracks from tracks.json
-fetch('tracks.json')
+		// Now that we have CACHE_NAME, load tracks
+		return fetch('tracks.json');
+	})
 	.then(response => {
 		if (!response.ok) {
 			throw new Error('tracks.json not found');
@@ -85,7 +81,7 @@ fetch('tracks.json')
 		}
 	})
 	.catch(error => {
-		console.error('Error loading tracks:', error);
+		console.error('Error loading manifest or tracks:', error);
 		updateCurrentSongDisplay('Unable to load tracks. Please check your connection.');
 	});
 
@@ -927,8 +923,9 @@ async function checkCachedTracks() {
 
 		// Check each song to see if it's cached
 		for (const song of songs) {
-			const trackUrl = `tracks/${song.filename}`;
-			const isInCache = cachedRequests.some(request => request.url.endsWith(trackUrl));
+			// Build the same absolute URL that storeBlobInCache uses for consistency
+			const absoluteUrl = new URL(`tracks/${song.filename}`, window.location.href).href;
+			const isInCache = cachedRequests.some(request => request.url === absoluteUrl);
 			if (isInCache) {
 				cachedTracks.add(song.filename);
 			}

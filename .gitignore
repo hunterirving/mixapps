@@ -10,9 +10,6 @@ tracks/
 tracks.json
 resources/album_art.jpg
 
-# Personal notes and ideas
-ideas.md
-
 # macOS
 .DS_Store
 
@@ -28,5 +25,6 @@ manifest.json
 resource-manifest.json
 service-worker.js
 
-# Deployment script (personal)
+# Personal deployment scripts
 push.py
+cleanup.py

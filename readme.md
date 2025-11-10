@@ -1,6 +1,6 @@
 # 💿 vibe capsule
 
-resurrect the lost art of <a href="https://ihavethatonvinyl.com/liner-notes/the-lost-art-of-the-mixtape/">mixtape</a><a href="https://melos.audio/blogs/information/the-lost-art-of-the-mixtape">-making</a> by packaging folders of .MP3s as progressive web apps.
+resurrect the lost art of <a href="https://ihavethatonvinyl.com/liner-notes/the-lost-art-of-the-mixtape/">mixtape</a><a href="https://melos.audio/blogs/information/the-lost-art-of-the-mixtape">-making</a> by packaging folders of .mp3s as progressive web apps.
 
 <img src="readme_images/collection.jpeg" width="550">
 
@@ -29,14 +29,14 @@ this project aims to resurrect what made mixtapes meaningful: permanence, owners
 it's yours, and then it's theirs.
 
 ## quickstart
-1. **add your .MP3 files** to the `/tracks` directory
+1. **add your .mp3 files** to the `/tracks` directory
 	- you can do this manually or run `rip.py` to rip tracks from a physical CD
 2. **give it a listen**
 	- run `scan.py` to parse the contents of `/tracks` and populate `tracks.json`, which defines the songs available to the player. after running `scan.py` once, you can manually edit `tracks.json` to refine your mix.
 	- run `host.py` to start a local HTTP server for testing. scan the QR code printed to the terminal to test the app from any device on your local network.
 
 3. **build the PWA**
-	- run `generate_manifests.py` and follow the interactive prompts to specify an app name and remote server path. this generates:
+	- run `generate_manifests.py` and follow the interactive prompts to specify an app name and the remote server path where your app will be hosted. this generates:
 		- `manifest.json` (PWA configuration file)
 		- `resource-manifest.json` (defines the files to be cached for offline use)
 		- `service-worker.js` (manages offline caching)
@@ -45,7 +45,7 @@ it's yours, and then it's theirs.
 	- upload the entire project directory to any web host with HTTPS support (GitHub Pages, AWS S3, etc.)
 5. **install on your device**
 	- visit the hosted URL and follow your browser's prompts to "install" or "add app to home screen" (detailed instructions <a href="https://hunterirving.github.io/web_workshop/pwa">here</a>)
-	- once installed, your mixapp works completely offline and runs like a native application:<br><br>
+	- once installed, the app works completely offline and behaves like a native application<br><br>
 	<img src="readme_images/lock_screen.jpeg" width="275"><br>
 	(pictured: integration with iOS lockscreen controls)
 

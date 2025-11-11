@@ -116,10 +116,39 @@ def print_qr_code(url):
 		print(f"\nCould not generate QR code: {e}")
 
 
+def generate_localhost_manifests():
+	"""Generate PWA manifests for localhost usage"""
+	try:
+		# Import the generate_manifests module
+		sys.path.insert(0, str(SCRIPT_DIR))
+		from generate_manifests import get_configuration, generate_pwa_manifests
+
+		# Get configuration with localhost mode enabled
+		print()
+		app_name, base_path = get_configuration(localhost=True)
+
+		# Generate the manifests
+		generate_pwa_manifests(app_name, base_path)
+		print()
+
+		return app_name
+
+	except ImportError as e:
+		print(f"Error: Could not import generate_manifests.py: {e}")
+		print("Make sure generate_manifests.py is in the same directory.")
+		sys.exit(1)
+	except Exception as e:
+		print(f"Error generating manifests: {e}")
+		sys.exit(1)
+
+
 def start_server():
 	"""Start the HTTP server (runs after venv is set up)"""
 	# Change to script directory
 	os.chdir(SCRIPT_DIR)
+
+	# Generate manifests for localhost
+	app_name = generate_localhost_manifests()
 
 	# Find an available port
 	port = find_available_port(DEFAULT_PORT)
@@ -153,7 +182,7 @@ def start_server():
 			network_url = f"http://{local_ip}:{port}"
 
 			print("=" * 60)
-			print("💿 vibe capsule")
+			print(f"💿 {app_name}")
 			print("=" * 60)
 			print(f"\nServer running on port {port}")
 

@@ -8,37 +8,54 @@ import json
 import re
 from pathlib import Path
 
-def get_configuration():
-	"""Prompt user for configuration values"""
+def get_configuration(localhost=False):
+	"""Prompt user for configuration values
+
+	Args:
+		localhost: If True, assumes root path and only asks for app name.
+		           This enables PWA installation on localhost (iOS 18+).
+	"""
 	print("=" * 60)
 	print("PWA Configuration")
 	print("=" * 60)
 	print()
 
 	# Get app name
-	app_name = input("Enter a name for your mixapp: ").strip()
-	if not app_name:
-		print("Error: App name is required")
-		exit(1)
-
-	# Get base path with smart default
-	default_path = app_name.lower().replace(" ", "_")
-	print()
-	print(f"Enter the deployment path (or press Return/Enter for default)")
-	print(f"Default: /{default_path}/")
-	base_path_input = input("Path: ").strip()
-
-	if base_path_input:
-		# User provided a path - ensure it has leading/trailing slashes
-		base_path = base_path_input
-		if not base_path.startswith("/"):
-			base_path = "/" + base_path
-		if not base_path.endswith("/"):
-			base_path = base_path + "/"
+	if localhost:
+		app_name = input("Enter a name for your mixapp (or press Return/Enter for 'vibe capsule'): ").strip()
+		if not app_name:
+			app_name = "vibe capsule"
+			print(f"Using default: {app_name}")
 	else:
-		# Use default
-		base_path = f"/{default_path}/"
-		print(f"Using default path: {base_path}")
+		app_name = input("Enter a name for your mixapp: ").strip()
+		if not app_name:
+			print("Error: App name is required")
+			exit(1)
+
+	# For localhost mode, use root path
+	if localhost:
+		base_path = "/"
+		print()
+		print("Localhost mode: Using root path for PWA installation")
+	else:
+		# Get base path with smart default
+		default_path = app_name.lower().replace(" ", "_")
+		print()
+		print(f"Enter the deployment path (or press Return/Enter for default)")
+		print(f"Default: /{default_path}/")
+		base_path_input = input("Path: ").strip()
+
+		if base_path_input:
+			# User provided a path - ensure it has leading/trailing slashes
+			base_path = base_path_input
+			if not base_path.startswith("/"):
+				base_path = "/" + base_path
+			if not base_path.endswith("/"):
+				base_path = base_path + "/"
+		else:
+			# Use default
+			base_path = f"/{default_path}/"
+			print(f"Using default path: {base_path}")
 
 	print()
 	print(f"Configuration:")
@@ -47,14 +64,6 @@ def get_configuration():
 	print()
 
 	return app_name, base_path
-
-# Get configuration from user
-APP_NAME, BASE_PATH = get_configuration()
-
-# Derived values (can be manually overridden if desired)
-SHORT_NAME = APP_NAME
-CACHE_NAME = APP_NAME
-APP_DESCRIPTION = f"{APP_NAME} · vibe capsule"
 
 # File paths (no need to edit these)
 SCRIPT_DIR = Path(__file__).parent.absolute()
@@ -85,8 +94,22 @@ def get_background_color():
 	return "#080a0c"
 
 
-def generate_pwa_manifests():
-	"""Generate PWA manifest files based on tracks.json"""
+def generate_pwa_manifests(app_name=None, base_path=None):
+	"""Generate PWA manifest files based on tracks.json
+
+	Args:
+		app_name: Name of the app. If None, will be prompted via get_configuration()
+		base_path: Base path for the app. If None, will be prompted via get_configuration()
+	"""
+	# Get configuration if not provided
+	if app_name is None or base_path is None:
+		app_name, base_path = get_configuration()
+
+	# Derived values
+	short_name = app_name
+	cache_name = app_name
+	app_description = f"{app_name} · vibe capsule"
+
 	print("Generating PWA manifests...")
 
 	# Load tracks.json
@@ -102,16 +125,16 @@ def generate_pwa_manifests():
 
 	# Generate manifest.json
 	manifest = {
-		"id": BASE_PATH,
-		"name": APP_NAME,
-		"short_name": SHORT_NAME,
-		"description": APP_DESCRIPTION,
-		"start_url": BASE_PATH,
-		"scope": BASE_PATH,
+		"id": base_path,
+		"name": app_name,
+		"short_name": short_name,
+		"description": app_description,
+		"start_url": base_path,
+		"scope": base_path,
 		"display": "standalone",
 		"background_color": background_color,
 		"theme_color": background_color,
-		"cache_name": CACHE_NAME,  # Custom field for script.js to use
+		"cache_name": cache_name,  # Custom field for script.js to use
 		"icons": [
 			{
 				"src": "resources/icon.png",
@@ -150,8 +173,8 @@ def generate_pwa_manifests():
 
 	# Generate service-worker.js
 	static_files = resource_manifest["static_files"]
-	service_worker_content = f'''// Auto-generated service worker for {APP_NAME} PWA
-const CACHE_NAME = '{CACHE_NAME}';
+	service_worker_content = f'''// Auto-generated service worker for {app_name} PWA
+const CACHE_NAME = '{cache_name}';
 const staticFilesToCache = {json.dumps(static_files, indent=2)};
 
 // Get the base path from the service worker location
@@ -283,4 +306,6 @@ self.addEventListener('fetch', (event) => {{
 
 
 if __name__ == "__main__":
-	generate_pwa_manifests()
+	# When run directly, get configuration and generate manifests
+	app_name, base_path = get_configuration()
+	generate_pwa_manifests(app_name, base_path)

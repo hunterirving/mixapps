@@ -156,14 +156,13 @@ def start_server():
 			print("💿 vibe capsule")
 			print("=" * 60)
 			print(f"\nServer running on port {port}")
-			print(f"\nLocal access:   {local_url}")
-			print(f"Network access: {network_url}")
 
 			# Print QR code for easy mobile access
 			print_qr_code(network_url)
 
-			print("Press Ctrl+C to stop the server")
-			print("=" * 60)
+			print(f"Local access:   {local_url}")
+			print(f"Network access: {network_url}")
+			print("\nPress Ctrl+C to stop the server")
 
 			# Serve forever
 			httpd.serve_forever()

@@ -55,7 +55,7 @@ fetch('manifest.json')
 		console.log('Using cache name:', CACHE_NAME);
 
 		// Now that we have CACHE_NAME, load tracks
-		return fetch('tracks.json');
+		return fetch('tracks/tracks.json');
 	})
 	.then(response => {
 		if (!response.ok) {

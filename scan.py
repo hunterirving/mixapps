@@ -13,7 +13,7 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).parent.absolute()
 VENV_DIR = SCRIPT_DIR / "venv"
 TRACKS_DIR = SCRIPT_DIR / "tracks"
-OUTPUT_FILE = SCRIPT_DIR / "tracks.json"
+OUTPUT_FILE = TRACKS_DIR / "tracks.json"
 REQUIREMENTS_FILE = SCRIPT_DIR / "requirements.txt"
 
 

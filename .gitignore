@@ -6,8 +6,8 @@ __pycache__/
 *.pyd
 
 # Tracks and playlists
-tracks/
-tracks.json
+tracks/*
+!tracks/readme.md
 resources/album_art.jpg
 
 # macOS

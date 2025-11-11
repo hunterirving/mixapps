@@ -58,7 +58,7 @@ APP_DESCRIPTION = f"{APP_NAME} · vibe capsule"
 
 # File paths (no need to edit these)
 SCRIPT_DIR = Path(__file__).parent.absolute()
-TRACKS_JSON = SCRIPT_DIR / "tracks.json"
+TRACKS_JSON = SCRIPT_DIR / "tracks" / "tracks.json"
 STYLES_CSS = SCRIPT_DIR / "styles.css"
 
 
@@ -133,7 +133,7 @@ def generate_pwa_manifests():
 			"index.html",
 			"styles.css",
 			"script.js",
-			"tracks.json",
+			"tracks/tracks.json",
 			"resources/icon.png",
 			"resources/play.png",
 			"resources/pause.png",

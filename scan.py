@@ -89,7 +89,8 @@ def scan_tracks():
 
 	if not mp3_files:
 		print(f"No MP3 files found in {TRACKS_DIR}")
-		sys.exit(1)
+		print(f"\nPlease add MP3 files to the {TRACKS_DIR.name} directory and run this script again.")
+		sys.exit(0)
 
 	print(f"Found {len(mp3_files)} MP3 file(s). Extracting metadata...\n")
 
@@ -132,6 +133,25 @@ def scan_tracks():
 		except Exception as e:
 			print(f"✗ Error reading {mp3_file.name}: {e}")
 			continue
+
+	# Check if ALL titles start with numbers
+	# If so, strip the leading numbers from all titles
+	import re
+	all_have_leading_numbers = all(
+		re.match(r'^\d+\s*[-.]?\s*', track['title'])
+		for track in tracks
+	)
+
+	if all_have_leading_numbers and tracks:
+		print("\nDetected track numbers in all titles. Stripping them...")
+		for track in tracks:
+			original_title = track['title']
+			# Remove leading number pattern
+			cleaned_title = re.sub(r'^\d+\s*[-.]?\s*', '', original_title)
+			if cleaned_title:  # Only update if something remains
+				track['title'] = cleaned_title
+				if cleaned_title != original_title:
+					print(f"  {original_title} → {cleaned_title}")
 
 	if not tracks:
 		print("\nNo valid MP3 files could be processed.")

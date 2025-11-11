@@ -54,6 +54,11 @@ fetch('manifest.json')
 		CACHE_NAME = manifest.cache_name || manifest.name;
 		console.log('Using cache name:', CACHE_NAME);
 
+		// Set page title from manifest
+		if (manifest.name) {
+			document.title = manifest.name;
+		}
+
 		// Now that we have CACHE_NAME, load tracks
 		return fetch('tracks/tracks.json');
 	})

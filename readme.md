@@ -31,18 +31,21 @@ it's yours, and then it's theirs.
 ## quickstart
 1. **add your .mp3 files** to the `/tracks` directory
 	- you can do this manually or run `rip.py` to rip tracks from a physical CD
+
 2. **give it a listen**
 	- run `scan.py` to parse the contents of `/tracks` and populate `tracks.json`, which defines the songs available to the player. after running `scan.py` once, you can manually edit `tracks.json` to refine your mix.
 	- run `host.py` to start a local HTTP server for testing. scan the QR code printed to the terminal to test the app from any device on your local network.
 
 3. **build the PWA**
-	- run `generate_manifests.py` and follow the interactive prompts to specify an app name and the remote server path where your app will be hosted. this generates:
+	- run `generate_manifests.py` and follow the interactive prompts to specify an app name and the remote server path where your app will be hosted. this creates:
 		- `manifest.json` (PWA configuration file)
 		- `resource-manifest.json` (defines the files to be cached for offline use)
 		- `service-worker.js` (manages offline caching)
 	- optionally, add an `album_art.jpg` to `/resources`. it'll be used as the cover for your mix when playing on supported devices.
+
 4. **deploy your mixapp**
 	- upload the entire project directory to any web host with HTTPS support (GitHub Pages, AWS S3, etc.)
+
 5. **install on your device**
 	- visit the hosted URL and follow your browser's prompts to "install" or "add app to home screen" (detailed instructions <a href="https://hunterirving.github.io/web_workshop/pwa">here</a>)
 	- once installed, the app works completely offline and behaves like a native application<br><br>

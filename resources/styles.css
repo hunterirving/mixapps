@@ -318,21 +318,21 @@ body {
 }
 
 #playPause {
-	background-image: url('resources/play.png');
+	background-image: url('play.png');
 	background-position: 52.5% center;
 }
 
 #playPause.pause {
-	background-image: url('resources/pause.png');
+	background-image: url('pause.png');
 	background-position: center;
 }
 
 #prev {
-	background-image: url('resources/prev.png');
+	background-image: url('prev.png');
 	background-position: 45% center;
 }
 
 #next {
-	background-image: url('resources/next.png');
+	background-image: url('next.png');
 	background-position: 55% center;
 }

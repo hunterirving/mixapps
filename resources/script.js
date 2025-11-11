@@ -114,7 +114,7 @@ audio.addEventListener('play', () => {
 	if ('mediaSession' in navigator) {
 		// Convert relative path to absolute URL for media session
 		// Use document.baseURI to correctly resolve paths in subdirectories
-		const albumArtUrl = new URL('resources/album_art.jpg', document.baseURI).href;
+		const albumArtUrl = new URL('tracks/album_art.jpg', document.baseURI).href;
 		navigator.mediaSession.metadata = new MediaMetadata({
 			title: song.title,
 			artist: song.artist,
@@ -810,7 +810,7 @@ function preloadResources() {
 		'resources/pause.png',
 		'resources/prev.png',
 		'resources/next.png',
-		'resources/album_art.jpg'
+		'tracks/album_art.jpg'
 	];
 
 	const imagePromises = resources.map(src => {

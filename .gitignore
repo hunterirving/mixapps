@@ -8,7 +8,7 @@ __pycache__/
 # Tracks and playlists
 tracks/*
 !tracks/readme.md
-resources/album_art.jpg
+tracks/album_art.jpg
 
 # macOS
 .DS_Store

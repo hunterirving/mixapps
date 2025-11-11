@@ -41,7 +41,7 @@ it's yours, and then it's theirs.
 		- `manifest.json` (PWA configuration file)
 		- `resource-manifest.json` (defines the files to be cached for offline use)
 		- `service-worker.js` (manages offline caching)
-	- optionally, add an `album_art.jpg` to `/resources`. it'll be used as the cover for your mix when playing on supported devices.
+	- optionally, add an `album_art.jpg` to `/tracks`. it'll be used as the cover for your mix when playing on supported devices.
 
 4. **deploy your mixapp**
 	- upload the entire project directory to any web host with HTTPS support (GitHub Pages, AWS S3, etc.)

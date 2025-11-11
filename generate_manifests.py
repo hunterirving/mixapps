@@ -68,7 +68,7 @@ def get_configuration(localhost=False):
 # File paths (no need to edit these)
 SCRIPT_DIR = Path(__file__).parent.absolute()
 TRACKS_JSON = SCRIPT_DIR / "tracks" / "tracks.json"
-STYLES_CSS = SCRIPT_DIR / "styles.css"
+STYLES_CSS = SCRIPT_DIR / "resources" / "styles.css"
 
 
 def get_background_color():
@@ -154,15 +154,15 @@ def generate_pwa_manifests(app_name=None, base_path=None):
 		"static_files": [
 			"./",
 			"index.html",
-			"styles.css",
-			"script.js",
+			"resources/styles.css",
+			"resources/script.js",
 			"tracks/tracks.json",
 			"resources/icon.png",
 			"resources/play.png",
 			"resources/pause.png",
 			"resources/prev.png",
 			"resources/next.png",
-			"resources/album_art.jpg"
+			"tracks/album_art.jpg"
 		],
 		"tracks": [f"tracks/{track['filename']}" for track in tracks]
 	}

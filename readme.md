@@ -11,7 +11,7 @@ resurrect the lost art of <a href="https://ihavethatonvinyl.com/liner-notes/the-
 
 ## key features
 - mixtapes as self-contained apps that work completely offline on Windows, MacOS, Linux, iOS, and Android
-- lock screen media controls (iOS & Android) and keyboard media key support (▶️, ⏸️, ⏭️, ⏮️)
+- lock screen media controls (iOS & Android) and keyboard media key support
 - highly customizable interface (just add CSS)
 
 <p align="center">
@@ -19,7 +19,7 @@ resurrect the lost art of <a href="https://ihavethatonvinyl.com/liner-notes/the-
 </p>
 
 ## own something and be happy
-modern playlist sharing is ephemeral and platform-locked. shared playlists often require a paid subscription, can be modified after sharing, and decay as licenses expire.
+modern playlist sharing is ephemeral and platform-locked. shared playlists often require a paid subscription, and decay as licenses expire.
 > [!WARNING]
 > <i>This song is no longer available in your country or region.</i>
 
@@ -58,7 +58,7 @@ hits different, right?<br><br>
 		- **Android**:
 			- **Firefox**: tap `⋮` → Add app to Home screen → Add to home screen
 			- **Chrome**: tap `⋮` → Add to Home screen → Install
-		- for detailed PWA installation steps for your browser/OS, <a href="https://hunterirving.github.io/web_workshop/pwa">click here</a>.
+		- for detailed PWA installation steps for your browser/OS, <a href="https://hunterirving.github.io/web_workshop/pages/pwa/">click here</a>.
 	- after the initial download, the app works completely offline and behaves like a native application<br><br>
 	<img src="readme_images/lock_screen.jpeg" width="275"><br>
 	(pictured: integration with iOS lockscreen controls)

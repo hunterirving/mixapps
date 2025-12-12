@@ -137,7 +137,7 @@ def generate_pwa_manifests(app_name=None, base_path=None):
 		"cache_name": cache_name,  # Custom field for script.js to use
 		"icons": [
 			{
-				"src": "resources/icon.png",
+				"src": f"{base_path}resources/icon.png",
 				"sizes": "640x640",
 				"type": "image/png",
 				"purpose": "any maskable"

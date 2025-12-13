@@ -63,7 +63,7 @@ body {
 	justify-content: center;
 	background: transparent;
 	position: absolute;
-	bottom: 0;
+	bottom: .25rem;
 	left: 0;
 	right: 0;
 	box-sizing: border-box;

@@ -63,7 +63,7 @@ body {
 	justify-content: center;
 	background: transparent;
 	position: absolute;
-	bottom: .25rem;
+	bottom: 0;
 	left: 0;
 	right: 0;
 	box-sizing: border-box;
@@ -97,7 +97,7 @@ body {
 .controls-inner {
 	display: flex;
 	justify-content: space-between;
-	padding: 10px 15px;
+	padding: 10px 15px 15px;
 	pointer-events: auto;
 	width: 100%;
 	box-sizing: border-box;

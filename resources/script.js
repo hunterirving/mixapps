@@ -574,7 +574,7 @@ function startProgressBar() {
 				// Ignore errors from setPositionState
 			}
 		}
-	}, 500); // Check every 500ms
+	}, 100); // Check every 100ms
 }
 
 function stopProgressBar() {

@@ -1,4 +1,4 @@
-# 💿 vibe capsule
+# 💿 mixapps
 
 resurrect the lost art of <a href="https://ihavethatonvinyl.com/liner-notes/the-lost-art-of-the-mixtape/">mixtape</a><a href="https://melos.audio/blogs/information/the-lost-art-of-the-mixtape">-making</a> by packaging folders of .mp3s as progressive web apps.
 
@@ -42,17 +42,17 @@ hits different, right?<br><br>
 	- run `scan.py` to parse `/tracks` and populate `tracks.json`, which defines the songs available to the player. after running `scan.py` once, you can manually edit `tracks.json` to refine your mix.
 	- optionally, add  an `album_art.jpg` to `/tracks` to set the cover art for your mix.
 
-3. **soundcheck**
+2. **soundcheck**
 	- run `host.py` to start a local HTTP server for testing. you can scan the QR code printed to the terminal to test the app from any device on your local network.
 
-4. **manifesting**
+3. **manifesting**
 	- run `generate_manifests.py` and follow the interactive prompts to specify an app name and the remote server path where your app will be hosted.
 		- this creates the config files that enable offline functionality: `manifest.json`, `resource-manifest.json`, and `service-worker.js`.
 
-5. **ship it**
+4. **ship it**
 	- upload the entire project directory to any web host with HTTPS support (GitHub Pages, AWS S3, etc.)
 
-6. **share your mixapp**
+5. **share your mixapp**
 	- send the hosted URL to your recipient and walk them through the installation process:
 		- **iOS (Safari)**: tap `···` → Share → More → Add to Home Screen → Add
 		- **Android**:

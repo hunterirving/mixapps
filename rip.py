@@ -259,7 +259,7 @@ def sanitize_filename(filename):
 def rip_cd():
 	"""Main function to rip CD to MP3 files"""
 	print("=" * 60)
-	print("💿 vibe capsule - CD Ripper")
+	print("💿 mixapps - CD Ripper")
 	print("=" * 60)
 
 	# Check for ffmpeg

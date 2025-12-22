@@ -152,7 +152,7 @@ def start_server():
 			network_url = f"http://{local_ip}:{port}"
 
 			print("=" * 60)
-			print("💿 vibe capsule")
+			print("💿 mixapps")
 			print("=" * 60)
 			print(f"\nServer running on port {port}")
 

@@ -22,9 +22,9 @@ def get_configuration(localhost=False):
 
 	# Get app name
 	if localhost:
-		app_name = input("Enter a name for your mixapp (or press Return/Enter for 'vibe capsule'): ").strip()
+		app_name = input("Enter a name for your mixapp (or press Return/Enter for 'my mixapp'): ").strip()
 		if not app_name:
-			app_name = "vibe capsule"
+			app_name = "my mixapp"
 			print(f"Using default: {app_name}")
 	else:
 		app_name = input("Enter a name for your mixapp: ").strip()
@@ -108,7 +108,7 @@ def generate_pwa_manifests(app_name=None, base_path=None):
 	# Derived values
 	short_name = app_name
 	cache_name = app_name
-	app_description = f"{app_name} · vibe capsule"
+	app_description = f"{app_name}"
 
 	print("Generating PWA manifests...")
 

@@ -37,16 +37,17 @@ hits different, right?<br><br>
 
 ## quickstart
 1. **prep your playlist**
-	- add your .mp3 files to the `/tracks` directory
-		- you can do this manually or run `rip.py` to rip tracks from a physical CD.
-	- run `scan.py` to parse `/tracks` and populate `tracks.json`, which defines the songs available to the player. after running `scan.py` once, you can manually edit `tracks.json` to refine your mix.
+	- add your .mp3 files to the `/tracks` directory, or use:
+		- `./rip.py` to rip tracks from a physical CD
+		- `./buy.py` to search for songs to purchase (uses iTunes on MacOS, <a href="https://song.link/i/1651294855">song.link</a> otherwise)
+	- run `./scan.py` to parse `/tracks` and populate `tracks.json`, which defines the songs available to the player. after running `./scan.py` once, you can manually edit `tracks.json` to refine your mix.
 	- optionally, add  an `album_art.jpg` to `/tracks` to set the cover art for your mix.
 
 2. **soundcheck**
-	- run `host.py` to start a local HTTP server for testing. you can scan the QR code printed to the terminal to test the app from any device on your local network.
+	- run `./host.py` to start a local HTTP server for testing. you can scan the QR code printed to the terminal to test the app from any device on your local network.
 
 3. **manifesting**
-	- run `generate_manifests.py` and follow the interactive prompts to specify an app name and the remote server path where your app will be hosted.
+	- run `./generate_manifests.py` and follow the interactive prompts to specify an app name and the remote server path where your app will be hosted.
 		- this creates the config files that enable offline functionality: `manifest.json`, `resource-manifest.json`, and `service-worker.js`.
 
 4. **ship it**

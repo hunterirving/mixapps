@@ -45,21 +45,24 @@ let priorityPreloadQueue = []; // Songs requested by user that need priority pre
 let isPreloadingPriority = false;
 let totalBytesLoaded = 0; // Track total filesize of all preloaded songs
 let cachedTracks = new Set(); // Track which songs are cached for offline use
-let CACHE_NAME = null; // Will be loaded from manifest.json
+let CACHE_NAME = 'my-mixapp'; // Default fallback
 
 // Load cache name from manifest.json first, then load tracks
 fetch('manifest.json')
-	.then(response => response.json())
+	.then(response => {
+		if (!response.ok) return null;
+		return response.json();
+	})
 	.then(manifest => {
-		CACHE_NAME = manifest.cache_name || manifest.name;
-		console.log('Using cache name:', CACHE_NAME);
+		if (manifest) {
+			CACHE_NAME = manifest.cache_name || manifest.name || CACHE_NAME;
+			console.log('Using cache name:', CACHE_NAME);
 
-		// Set page title from manifest
-		if (manifest.name) {
-			document.title = manifest.name;
+			if (manifest.name) {
+				document.title = manifest.name;
+			}
 		}
 
-		// Now that we have CACHE_NAME, load tracks
 		return fetch('mix/tracks.json');
 	})
 	.then(response => {
@@ -86,7 +89,7 @@ fetch('manifest.json')
 		}
 	})
 	.catch(error => {
-		console.error('Error loading manifest or tracks:', error);
+		console.error('Error loading tracks:', error);
 		updateCurrentSongDisplay('Unable to load tracks. Please check your connection.');
 	});
 

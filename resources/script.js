@@ -998,13 +998,29 @@ async function loadFromCache(filename) {
 	}
 }
 
+// MIME type mapping for supported audio formats
+const AUDIO_MIME_TYPES = {
+	'.mp3': 'audio/mpeg',
+	'.m4a': 'audio/mp4',
+	'.ogg': 'audio/ogg',
+	'.flac': 'audio/flac',
+	'.wav': 'audio/wav'
+};
+
+// Get MIME type based on file extension
+function getAudioMimeType(filename) {
+	const ext = filename.substring(filename.lastIndexOf('.')).toLowerCase();
+	return AUDIO_MIME_TYPES[ext] || 'audio/mpeg';
+}
+
 // Store blob in Cache API for offline access
 async function storeBlobInCache(filename, blob) {
 	try {
 		const cache = await caches.open(CACHE_NAME);
+		const mimeType = getAudioMimeType(filename);
 		const response = new Response(blob, {
 			headers: {
-				'Content-Type': 'audio/mpeg',
+				'Content-Type': mimeType,
 				'Content-Length': blob.size
 			}
 		});

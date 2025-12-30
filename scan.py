@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-MP3 Scanner - Scans /tracks directory and generates tracks.json with metadata
+Scans /tracks directory and populates tracks.json with metadata
+Supports MP3, M4A, OGG, FLAC, and WAV formats
 Automatically manages a virtual environment for dependencies
 """
 
@@ -60,21 +61,24 @@ def run_in_venv():
 
 
 def scan_tracks():
-	"""Main function to scan MP3 files and generate tracks.json"""
+	"""Main function to scan audio files and generate tracks.json"""
 	# Import mutagen here (only after venv is active)
 	try:
-		from mutagen.mp3 import MP3
-		from mutagen.id3 import ID3
+		from mutagen import File as MutagenFile
 	except ImportError:
 		print("Error: mutagen library not found. Please check your installation.")
 		sys.exit(1)
+
+	# Supported audio formats
+	SUPPORTED_EXTENSIONS = ('.mp3', '.m4a', '.ogg', '.flac', '.wav')
 
 	# Check if tracks directory exists, create if it doesn't
 	if not TRACKS_DIR.exists():
 		print(f"Creating {TRACKS_DIR.name} directory...")
 		TRACKS_DIR.mkdir(parents=True, exist_ok=True)
 		print(f"✓ {TRACKS_DIR.name} directory created.")
-		print(f"\nPlease add MP3 files to the {TRACKS_DIR.name} directory and run this script again.")
+		print(f"\nPlease add audio files to the {TRACKS_DIR.name} directory and run this script again.")
+		print(f"Supported formats: {', '.join(SUPPORTED_EXTENSIONS)}")
 		sys.exit(0)
 
 	# Check if tracks.json already exists
@@ -84,38 +88,33 @@ def scan_tracks():
 			print(f"Scan cancelled. {OUTPUT_FILE.name} was not modified.")
 			sys.exit(0)
 
-	# Find all MP3 files
-	mp3_files = list(TRACKS_DIR.glob("*.mp3"))
+	# Find all supported audio files
+	audio_files = [f for f in TRACKS_DIR.iterdir() if f.suffix.lower() in SUPPORTED_EXTENSIONS]
 
-	if not mp3_files:
-		print(f"No MP3 files found in {TRACKS_DIR}")
-		print(f"\nPlease add MP3 files to the {TRACKS_DIR.name} directory and run this script again.")
+	if not audio_files:
+		print(f"No audio files found in {TRACKS_DIR}")
+		print(f"\nPlease add audio files to the {TRACKS_DIR.name} directory and run this script again.")
+		print(f"Supported formats: {', '.join(SUPPORTED_EXTENSIONS)}")
 		sys.exit(0)
 
-	print(f"Found {len(mp3_files)} MP3 file(s). Extracting metadata...\n")
+	print(f"Found {len(audio_files)} audio file(s). Extracting metadata...\n")
 
 	tracks = []
 
-	for mp3_file in sorted(mp3_files):
+	for audio_file in sorted(audio_files):
 		try:
-			audio = MP3(mp3_file)
+			audio = MutagenFile(audio_file, easy=True)
 
-			# Try to get ID3 tags
 			title = None
 			artist = None
 
-			if audio.tags:
-				# Try different title tags
-				if 'TIT2' in audio.tags:  # Title
-					title = str(audio.tags['TIT2'])
-
-				# Try different artist tags
-				if 'TPE1' in audio.tags:  # Artist
-					artist = str(audio.tags['TPE1'])
+			if audio and audio.tags:
+				title = audio.tags.get('title', [None])[0]
+				artist = audio.tags.get('artist', [None])[0]
 
 			# Fallback to filename for title if not found
 			if not title:
-				title = mp3_file.stem  # filename without extension
+				title = audio_file.stem  # filename without extension
 
 			# Fallback to "Unknown Artist" if not found
 			if not artist:
@@ -124,14 +123,14 @@ def scan_tracks():
 			track_info = {
 				"title": title,
 				"artist": artist,
-				"filename": mp3_file.name
+				"filename": audio_file.name
 			}
 
 			tracks.append(track_info)
 			print(f"✓ {track_info['artist']} - {track_info['title']}")
 
 		except Exception as e:
-			print(f"✗ Error reading {mp3_file.name}: {e}")
+			print(f"✗ Error reading {audio_file.name}: {e}")
 			continue
 
 	# Check if ALL titles start with numbers
@@ -154,7 +153,7 @@ def scan_tracks():
 					print(f"  {original_title} → {cleaned_title}")
 
 	if not tracks:
-		print("\nNo valid MP3 files could be processed.")
+		print("\nNo valid audio files could be processed.")
 		sys.exit(1)
 
 	# Write to tracks.json

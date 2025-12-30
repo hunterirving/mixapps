@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CD Ripper - Rips audio CDs to MP3 files in /tracks directory
+Rips audio CDs to MP3 files in /tracks directory
 Uses system tools: ffmpeg/ffprobe (no Python dependencies needed)
 """
 

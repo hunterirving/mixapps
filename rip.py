@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Rips audio CDs to MP3 files in /tracks directory
+Rips audio CDs to MP3 files in /mix directory
 Uses system tools: ffmpeg/ffprobe (no Python dependencies needed)
 """
 
@@ -13,7 +13,7 @@ from pathlib import Path
 import platform
 
 SCRIPT_DIR = Path(__file__).parent.absolute()
-TRACKS_DIR = SCRIPT_DIR / "tracks"
+MIX_DIR = SCRIPT_DIR / "mix"
 
 
 def check_ffmpeg():
@@ -270,9 +270,9 @@ def rip_cd():
 		print("\n✓ ffmpeg found.")
 
 	# Create tracks directory if it doesn't exist
-	if not TRACKS_DIR.exists():
-		print(f"\nCreating {TRACKS_DIR.name} directory...")
-		TRACKS_DIR.mkdir(parents=True, exist_ok=True)
+	if not MIX_DIR.exists():
+		print(f"\nCreating {MIX_DIR.name} directory...")
+		MIX_DIR.mkdir(parents=True, exist_ok=True)
 
 	# Find CD mount point
 	print("\nSearching for audio CD...")
@@ -299,7 +299,7 @@ def rip_cd():
 
 	# Confirm before ripping
 	print(f"\nThis will copy and convert {len(audio_files)} tracks to MP3 format.")
-	print(f"Output directory: {TRACKS_DIR}")
+	print(f"Output directory: {MIX_DIR}")
 	
 	# Prompt for artist name
 	print("\nEnter the artist name for this album.")
@@ -324,12 +324,12 @@ def rip_cd():
 		cleaned_name = re.sub(r'^\d+\s*[-.]?\s*', '', base_name) or base_name
 		
 		padded_idx = str(idx).zfill(padding_width)
-		output_file = TRACKS_DIR / f"{padded_idx} {cleaned_name}.mp3"
+		output_file = MIX_DIR / f"{padded_idx} {cleaned_name}.mp3"
 
 		# Handle duplicate filenames
 		counter = 1
 		while output_file.exists():
-			output_file = TRACKS_DIR / f"{padded_idx} {cleaned_name}_{counter}.mp3"
+			output_file = MIX_DIR / f"{padded_idx} {cleaned_name}_{counter}.mp3"
 			counter += 1
 
 		print(f"[{idx}/{len(audio_files)}] {audio_file.name} -> {output_file.name}")
@@ -361,7 +361,7 @@ def rip_cd():
 	print(f"\n✓ Successfully ripped {success_count}/{len(audio_files)} tracks in {total_minutes}m {total_secs}s.")
 
 	if success_count > 0:
-		print(f"\nTracks saved to: {TRACKS_DIR}")
+		print(f"\nTracks saved to: {MIX_DIR}")
 		print("\nNext steps:")
 		print("  1. Run scan.py to generate tracks.json with metadata")
 		print("  2. Run host.py to test your mixtape locally")

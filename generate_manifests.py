@@ -67,7 +67,7 @@ def get_configuration(localhost=False):
 
 # File paths (no need to edit these)
 SCRIPT_DIR = Path(__file__).parent.absolute()
-TRACKS_JSON = SCRIPT_DIR / "tracks" / "tracks.json"
+TRACKS_JSON = SCRIPT_DIR / "mix" / "tracks.json"
 STYLES_CSS = SCRIPT_DIR / "resources" / "styles.css"
 
 
@@ -156,15 +156,15 @@ def generate_pwa_manifests(app_name=None, base_path=None):
 			"index.html",
 			"resources/styles.css",
 			"resources/script.js",
-			"tracks/tracks.json",
+			"mix/tracks.json",
 			"resources/icon.png",
 			"resources/play.png",
 			"resources/pause.png",
 			"resources/prev.png",
 			"resources/next.png",
-			"tracks/album_art.jpg"
+			"mix/album_art.jpg"
 		],
-		"tracks": [f"tracks/{track['filename']}" for track in tracks]
+		"tracks": [f"mix/{track['filename']}" for track in tracks]
 	}
 
 	with open(SCRIPT_DIR / "resource-manifest.json", 'w', encoding='utf-8') as f:
@@ -185,8 +185,8 @@ const getBasePath = () => {{
 
 const basePath = getBasePath();
 
-// Install event - cache only static resources (not MP3s)
-// MP3s will be cached by the main app's blob preloading system
+// Install event - cache only static resources (not audio files)
+// Audio files will be cached by the main app's blob preloading system
 self.addEventListener('install', (event) => {{
 	console.log('Service Worker installing...', 'Base path:', basePath);
 	event.waitUntil(

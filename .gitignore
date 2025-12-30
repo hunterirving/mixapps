@@ -5,10 +5,9 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Tracks and playlists
-tracks/*
-!tracks/readme.md
-tracks/album_art.jpg
+# Mix folder (audio files, album art, custom CSS/JS)
+mix/*
+!mix/readme.md
 
 # macOS
 .DS_Store

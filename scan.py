@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Scans /tracks directory and populates tracks.json with metadata
+Scans /mix directory and populates tracks.json with metadata
 Supports MP3, M4A, OGG, FLAC, and WAV formats
 Automatically manages a virtual environment for dependencies
 """
@@ -13,8 +13,8 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent.absolute()
 VENV_DIR = SCRIPT_DIR / "venv"
-TRACKS_DIR = SCRIPT_DIR / "tracks"
-OUTPUT_FILE = TRACKS_DIR / "tracks.json"
+MIX_DIR = SCRIPT_DIR / "mix"
+OUTPUT_FILE = MIX_DIR / "tracks.json"
 REQUIREMENTS_FILE = SCRIPT_DIR / "requirements.txt"
 
 
@@ -73,11 +73,11 @@ def scan_tracks():
 	SUPPORTED_EXTENSIONS = ('.mp3', '.m4a', '.ogg', '.flac', '.wav')
 
 	# Check if tracks directory exists, create if it doesn't
-	if not TRACKS_DIR.exists():
-		print(f"Creating {TRACKS_DIR.name} directory...")
-		TRACKS_DIR.mkdir(parents=True, exist_ok=True)
-		print(f"✓ {TRACKS_DIR.name} directory created.")
-		print(f"\nPlease add audio files to the {TRACKS_DIR.name} directory and run this script again.")
+	if not MIX_DIR.exists():
+		print(f"Creating {MIX_DIR.name} directory...")
+		MIX_DIR.mkdir(parents=True, exist_ok=True)
+		print(f"✓ {MIX_DIR.name} directory created.")
+		print(f"\nAdd audio files to the {MIX_DIR.name} directory and run this script again.")
 		print(f"Supported formats: {', '.join(SUPPORTED_EXTENSIONS)}")
 		sys.exit(0)
 
@@ -89,11 +89,11 @@ def scan_tracks():
 			sys.exit(0)
 
 	# Find all supported audio files
-	audio_files = [f for f in TRACKS_DIR.iterdir() if f.suffix.lower() in SUPPORTED_EXTENSIONS]
+	audio_files = [f for f in MIX_DIR.iterdir() if f.suffix.lower() in SUPPORTED_EXTENSIONS]
 
 	if not audio_files:
-		print(f"No audio files found in {TRACKS_DIR}")
-		print(f"\nPlease add audio files to the {TRACKS_DIR.name} directory and run this script again.")
+		print(f"No audio files found in {MIX_DIR}")
+		print(f"\nPlease add audio files to the {MIX_DIR.name} directory and run this script again.")
 		print(f"Supported formats: {', '.join(SUPPORTED_EXTENSIONS)}")
 		sys.exit(0)
 

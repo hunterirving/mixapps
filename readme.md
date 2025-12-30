@@ -37,11 +37,12 @@ hits different, right?<br><br>
 
 ## quickstart
 1. **prep your playlist**
-	- add your .mp3 files to the `/tracks` directory, or use:
+	- add your audio files to the `/mix` directory, or use:
 		- `./rip.py` to rip tracks from a physical CD
 		- `./buy.py` to search for songs to purchase (uses iTunes on MacOS, <a href="https://song.link/i/1651294855">song.link</a> otherwise)
-	- run `./scan.py` to parse `/tracks` and populate `tracks.json`, which defines the songs available to the player. after running `./scan.py` once, you can manually edit `tracks.json` to refine your mix.
-	- optionally, add  an `album_art.jpg` to `/tracks` to set the cover art for your mix.
+	- run `./scan.py` to parse `/mix` and populate `tracks.json`, which defines the songs available to the player. after running `./scan.py` once, you can manually edit `tracks.json` to refine your mix.
+	- optionally, add an `album_art.jpg` to `/mix` to set the cover art for your mix.
+	- supported audio formats: `.mp3`, `.m4a`, `.ogg`, `.flac`, `.wav`
 
 2. **soundcheck**
 	- run `./host.py` to start a local HTTP server for testing. you can scan the QR code printed to the terminal to test the app from any device on your local network.
@@ -63,6 +64,9 @@ hits different, right?<br><br>
 	- after the initial download, the app works completely offline and behaves like a native application<br><br>
 	<img src="readme_images/lock_screen.jpeg" width="275"><br>
 	(pictured: integration with iOS lockscreen controls)
+
+## customization
+add `custom.css` and/or `custom.js` to the `/mix` folder to customize your mixapp's appearance and behavior. these files are loaded automatically if present.
 
 ## intellectual property notice
 ensure you have the right to distribute any media files you include in public mixapps. personal archival backups are for your own use. sharing them with others, even as a gift, is not covered by fair use or backup exceptions.

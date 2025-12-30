@@ -60,7 +60,7 @@ fetch('manifest.json')
 		}
 
 		// Now that we have CACHE_NAME, load tracks
-		return fetch('tracks/tracks.json');
+		return fetch('mix/tracks.json');
 	})
 	.then(response => {
 		if (!response.ok) {
@@ -114,7 +114,7 @@ audio.addEventListener('play', () => {
 	if ('mediaSession' in navigator) {
 		// Convert relative path to absolute URL for media session
 		// Use document.baseURI to correctly resolve paths in subdirectories
-		const albumArtUrl = new URL('tracks/album_art.jpg', document.baseURI).href;
+		const albumArtUrl = new URL('mix/album_art.jpg', document.baseURI).href;
 		navigator.mediaSession.metadata = new MediaMetadata({
 			title: song.title,
 			artist: song.artist,
@@ -275,7 +275,7 @@ function playSong(index) {
 		audio.src = blobUrl;
 	} else {
 		console.log(`Song not preloaded, loading: ${song.filename}`);
-		audio.src = `tracks/${song.filename}`;
+		audio.src = `mix/${song.filename}`;
 		// Request priority preloading for this song
 		requestPriorityPreload(song.filename);
 	}
@@ -634,7 +634,7 @@ function applySeek(clickPercentage) {
 		if (preloadedAudio[song.filename]) {
 			audio.src = preloadedAudio[song.filename].blobUrl;
 		} else {
-			audio.src = `tracks/${song.filename}`;
+			audio.src = `mix/${song.filename}`;
 		}
 
 		// Wait for metadata to be loaded before seeking
@@ -810,7 +810,7 @@ function preloadResources() {
 		'resources/pause.png',
 		'resources/prev.png',
 		'resources/next.png',
-		'tracks/album_art.jpg'
+		'mix/album_art.jpg'
 	];
 
 	const imagePromises = resources.map(src => {
@@ -876,7 +876,7 @@ function preloadNextSong() {
 
 function fetchAndPreloadSong(song, filename) {
 	// Use fetch to force full download of the entire file
-	fetch(`tracks/${filename}`)
+	fetch(`mix/${filename}`)
 		.then(response => {
 			if (!response.ok) {
 				throw new Error(`HTTP error! status: ${response.status}`);
@@ -929,7 +929,7 @@ async function checkCachedTracks() {
 		// Check each song to see if it's cached
 		for (const song of songs) {
 			// Build the same absolute URL that storeBlobInCache uses for consistency
-			const absoluteUrl = new URL(`tracks/${song.filename}`, window.location.href).href;
+			const absoluteUrl = new URL(`mix/${song.filename}`, window.location.href).href;
 			const isInCache = cachedRequests.some(request => request.url === absoluteUrl);
 			if (isInCache) {
 				cachedTracks.add(song.filename);
@@ -968,10 +968,10 @@ async function loadFromCache(filename) {
 	try {
 		const cache = await caches.open(CACHE_NAME);
 		// Try both relative and absolute URLs
-		let response = await cache.match(`tracks/${filename}`);
+		let response = await cache.match(`mix/${filename}`);
 		if (!response) {
 			// Try with absolute URL
-			const absoluteUrl = new URL(`tracks/${filename}`, window.location.href).href;
+			const absoluteUrl = new URL(`mix/${filename}`, window.location.href).href;
 			response = await cache.match(absoluteUrl);
 		}
 
@@ -1025,7 +1025,7 @@ async function storeBlobInCache(filename, blob) {
 			}
 		});
 		// Use absolute URL for consistency
-		const absoluteUrl = new URL(`tracks/${filename}`, window.location.href).href;
+		const absoluteUrl = new URL(`mix/${filename}`, window.location.href).href;
 		await cache.put(absoluteUrl, response);
 		console.log(`✓ Cached for offline: ${filename}`);
 	} catch (error) {
@@ -1104,7 +1104,7 @@ function processPriorityPreload() {
 
 function priorityFetchAndPreloadSong(song, filename) {
 	// Use fetch to force full download of the entire file
-	fetch(`tracks/${filename}`)
+	fetch(`mix/${filename}`)
 		.then(response => {
 			if (!response.ok) {
 				throw new Error(`HTTP error! status: ${response.status}`);

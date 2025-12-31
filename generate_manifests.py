@@ -150,20 +150,26 @@ def generate_pwa_manifests(app_name=None, base_path=None):
 	print("✓ Generated manifest.json")
 
 	# Generate resource-manifest.json
+	static_files = [
+		"./",
+		"index.html",
+		"resources/styles.css",
+		"resources/script.js",
+		"mix/tracks.json",
+		"resources/icon.png",
+		"resources/play.png",
+		"resources/pause.png",
+		"resources/prev.png",
+		"resources/next.png",
+	]
+
+	# Conditionally include optional files if they exist
+	for optional_file in ["album_art.jpg", "custom.css", "custom.js"]:
+		if (SCRIPT_DIR / "mix" / optional_file).exists():
+			static_files.append(f"mix/{optional_file}")
+
 	resource_manifest = {
-		"static_files": [
-			"./",
-			"index.html",
-			"resources/styles.css",
-			"resources/script.js",
-			"mix/tracks.json",
-			"resources/icon.png",
-			"resources/play.png",
-			"resources/pause.png",
-			"resources/prev.png",
-			"resources/next.png",
-			"mix/album_art.jpg"
-		],
+		"static_files": static_files,
 		"tracks": [f"mix/{track['filename']}" for track in tracks]
 	}
 

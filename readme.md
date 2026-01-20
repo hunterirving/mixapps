@@ -12,7 +12,7 @@ resurrect the lost art of <a href="https://ihavethatonvinyl.com/liner-notes/the-
 ## key features
 - mixtapes as self-contained apps that work completely offline on Windows, MacOS, Linux, iOS, and Android
 - lock screen media controls (iOS & Android) and keyboard media key support
-- highly customizable interface (just add CSS)
+- highly customizable interface (just add CSS!)
 
 <p align="center">
 	<img src="readme_images/playlist.png" width="500">
@@ -39,7 +39,7 @@ hits different, right?<br><br>
 1. **prep your playlist**
 	- add your audio files to the `/mix` directory, or use:
 		- `./rip.py` to rip tracks from a physical CD
-		- `./buy.py` to search for songs to purchase (uses iTunes on MacOS, <a href="https://song.link/i/1651294855">song.link</a> otherwise)
+		- `./buy.py` to search for songs to purchase (opens in iTunes on MacOS, <a href="https://song.link/i/1651294855">song.link</a> otherwise)
 	- run `./scan.py` to parse `/mix` and populate `tracks.json`, which defines the songs available to the player. after running `./scan.py` once, you can manually edit `tracks.json` to refine your mix.
 	- optionally, add an `album_art.jpg` to `/mix` to set the cover art for your mix.
 	- supported audio formats: `.mp3`, `.m4a`, `.ogg`, `.flac`, `.wav`
@@ -58,7 +58,7 @@ hits different, right?<br><br>
 	- send the hosted URL to your recipient and walk them through the installation process:
 		- **iOS (Safari)**: tap `···` → Share → More → Add to Home Screen → Add
 		- **Android**:
-			- **Firefox**: tap `⋮` → Add app to Home screen → Add to home screen
+			- **Firefox**: tap `⋮` → `··· More` → Add to Home screen → Add to home screen
 			- **Chrome**: tap `⋮` → Add to Home screen → Install
 		- for detailed PWA installation steps for your browser/OS, <a href="https://hunterirving.github.io/web_workshop/pages/pwa/">click here</a>.
 	- after the initial download, the app works completely offline and behaves like a native application<br><br>
@@ -66,7 +66,7 @@ hits different, right?<br><br>
 	(pictured: integration with iOS lockscreen controls)
 
 ## customization
-add `custom.css` and/or `custom.js` to the `/mix` folder to customize your mixapp's appearance and behavior. these files are loaded automatically if present.
+add `custom.css` and/or `custom.js` to your `/mix` folder to customize your mixapp's appearance and behavior. these files are automatically loaded if present.
 
 ## intellectual property notice
 ensure you have the right to distribute any media files you include in public mixapps. personal archival backups are for your own use. sharing them with others, even as a gift, is not covered by fair use or backup exceptions.

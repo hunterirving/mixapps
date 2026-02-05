@@ -20,16 +20,7 @@ REQUIREMENTS_FILE = SCRIPT_DIR / "requirements.txt"
 
 def setup_venv():
 	"""Create and setup virtual environment if it doesn't exist"""
-	if not VENV_DIR.exists():
-		print("Creating virtual environment...")
-		try:
-			subprocess.check_call([sys.executable, "-m", "venv", str(VENV_DIR)])
-			print("Virtual environment created successfully.")
-		except subprocess.CalledProcessError as e:
-			print(f"Error creating virtual environment: {e}")
-			sys.exit(1)
-
-	# Determine the path to pip in the venv
+	# Determine the path to pip and python in the venv
 	if sys.platform == "win32":
 		pip_path = VENV_DIR / "Scripts" / "pip"
 		python_path = VENV_DIR / "Scripts" / "python"
@@ -37,11 +28,36 @@ def setup_venv():
 		pip_path = VENV_DIR / "bin" / "pip"
 		python_path = VENV_DIR / "bin" / "python3"
 
+	# Check if venv needs to be created or recreated
+	if not VENV_DIR.exists() or not python_path.exists():
+		if VENV_DIR.exists():
+			print("Virtual environment incomplete, recreating...")
+			import shutil
+			shutil.rmtree(VENV_DIR)
+		else:
+			print("Creating virtual environment...")
+
+		try:
+			subprocess.check_call([sys.executable, "-m", "venv", str(VENV_DIR)])
+			print("Virtual environment created successfully.")
+		except subprocess.CalledProcessError as e:
+			print(f"Error creating virtual environment: {e}")
+			sys.exit(1)
+
+	# Ensure pip is available (sometimes venv doesn't include it)
+	if not pip_path.exists():
+		print("Installing pip in virtual environment...")
+		try:
+			subprocess.check_call([str(python_path), "-m", "ensurepip", "--upgrade"])
+		except subprocess.CalledProcessError as e:
+			print(f"Error ensuring pip: {e}")
+			sys.exit(1)
+
 	# Install requirements if requirements.txt exists
 	if REQUIREMENTS_FILE.exists():
 		print("Installing dependencies from requirements.txt...")
 		try:
-			subprocess.check_call([str(pip_path), "install", "-q", "-r", str(REQUIREMENTS_FILE)])
+			subprocess.check_call([str(python_path), "-m", "pip", "install", "-q", "-r", str(REQUIREMENTS_FILE)])
 			print("Dependencies installed successfully.\n")
 		except subprocess.CalledProcessError as e:
 			print(f"Error installing dependencies: {e}")

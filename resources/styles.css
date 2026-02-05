@@ -257,8 +257,8 @@ body {
 	background: linear-gradient(
 		to bottom,
 		var(--background) 0%,
-		rgba(8, 10, 12, 0.5) 40%,
-		rgba(8, 10, 12, 0.2) 70%,
+		color-mix(in srgb, var(--background) 50%, transparent) 40%,
+		color-mix(in srgb, var(--background) 20%, transparent) 70%,
 		transparent 100%
 	);
 	pointer-events: none;

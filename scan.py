@@ -97,13 +97,6 @@ def scan_tracks():
 		print(f"Supported formats: {', '.join(SUPPORTED_EXTENSIONS)}")
 		sys.exit(0)
 
-	# Check if tracks.json already exists
-	if OUTPUT_FILE.exists():
-		response = input(f"{OUTPUT_FILE.name} already exists. Overwrite? (y/n): ").lower().strip()
-		if response != 'y':
-			print(f"Scan cancelled. {OUTPUT_FILE.name} was not modified.")
-			sys.exit(0)
-
 	# Find all supported audio files
 	audio_files = [f for f in MIX_DIR.iterdir() if f.suffix.lower() in SUPPORTED_EXTENSIONS]
 

@@ -56,12 +56,12 @@ hits different, right?<br><br>
 
 5. **share your mixapp**
 	- send the hosted URL to your recipient and walk them through the installation process:
-		- **iOS (Safari)**: tap `···` → Share → More → Add to Home Screen → Add
+		- **iOS (Safari)**: tap `···` → `Share` → `View More` → scroll down to reveal and tap `Add to Home Screen` → `Add`
 		- **Android**:
 			- **Firefox**: tap `⋮` → `··· More` → Add to Home screen → Add to home screen
 			- **Chrome**: tap `⋮` → Add to Home screen → Install
 		- for detailed PWA installation steps for your browser/OS, <a href="https://hunterirving.github.io/web_workshop/pages/pwa/">click here</a>.
-	- after the initial download, the app works completely offline and behaves like a native application<br><br>
+	- after the initial download and cache, mixapps work completely offline and behave like native applications<br><br>
 	<img src="readme_images/lock_screen.jpeg" width="275"><br>
 	(pictured: integration with iOS lockscreen controls)
 

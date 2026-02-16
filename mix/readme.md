@@ -1,6 +1,6 @@
 # /mix
 
-add your audio files here, then run `scan.py` to create `tracks.json`.
+add your audio files here, then run `build.py` to create `tracks.json`.
 
 supported formats: `.mp3`, `.m4a`, `.ogg`, `.flac`, `.wav`
 

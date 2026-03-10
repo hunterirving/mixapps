@@ -15,11 +15,10 @@ SCRIPT_DIR = Path(__file__).parent.absolute()
 VENV_DIR = SCRIPT_DIR / "venv"
 MIX_DIR = SCRIPT_DIR / "mix"
 OUTPUT_FILE = MIX_DIR / "tracks.json"
-REQUIREMENTS_FILE = SCRIPT_DIR / "requirements.txt"
 
 
 def setup_venv():
-	"""Create and setup virtual environment if it doesn't exist"""
+	"""Create and set up virtual environment if it doesn't exist"""
 	# Determine the path to pip and python in the venv
 	if sys.platform == "win32":
 		pip_path = VENV_DIR / "Scripts" / "pip"
@@ -53,15 +52,15 @@ def setup_venv():
 			print(f"Error ensuring pip: {e}")
 			sys.exit(1)
 
-	# Install requirements if requirements.txt exists
-	if REQUIREMENTS_FILE.exists():
-		print("Installing dependencies from requirements.txt...")
+	check = subprocess.run(
+		[str(python_path), "-c", "import mutagen"],
+		capture_output=True
+	)
+	if check.returncode != 0:
 		try:
-			subprocess.check_call([str(python_path), "-m", "pip", "install", "-q", "-r", str(REQUIREMENTS_FILE)])
-			print("Dependencies installed successfully.")
-		except subprocess.CalledProcessError as e:
-			print(f"Error installing dependencies: {e}")
-			sys.exit(1)
+			subprocess.check_call([str(python_path), "-m", "pip", "install", "-q", "mutagen"])
+		except subprocess.CalledProcessError:
+			print("Note: Could not install mutagen (offline?). Metadata will be derived from filenames.\n")
 
 	return python_path
 
@@ -81,9 +80,11 @@ def scan_tracks():
 	# Import mutagen here (only after venv is active)
 	try:
 		from mutagen import File as MutagenFile
+		has_mutagen = True
 	except ImportError:
-		print("Error: mutagen library not found. Please check your installation.")
-		sys.exit(1)
+		MutagenFile = None
+		has_mutagen = False
+		print("Mutagen not available. Metadata will be derived from filenames.\n")
 
 	# Supported audio formats
 	SUPPORTED_EXTENSIONS = ('.mp3', '.m4a', '.ogg', '.flac', '.wav')
@@ -112,14 +113,14 @@ def scan_tracks():
 
 	for audio_file in sorted(audio_files):
 		try:
-			audio = MutagenFile(audio_file, easy=True)
-
 			title = None
 			artist = None
 
-			if audio and audio.tags:
-				title = audio.tags.get('title', [None])[0]
-				artist = audio.tags.get('artist', [None])[0]
+			if has_mutagen:
+				audio = MutagenFile(audio_file, easy=True)
+				if audio and audio.tags:
+					title = audio.tags.get('title', [None])[0]
+					artist = audio.tags.get('artist', [None])[0]
 
 			# Fallback to filename for title if not found
 			if not title:

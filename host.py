@@ -15,7 +15,6 @@ from pathlib import Path
 DEFAULT_PORT = 8000
 SCRIPT_DIR = Path(__file__).parent.absolute()
 VENV_DIR = SCRIPT_DIR / "venv"
-REQUIREMENTS_FILE = SCRIPT_DIR / "requirements.txt"
 
 
 def setup_venv():
@@ -53,15 +52,15 @@ def setup_venv():
 			print(f"Error ensuring pip: {e}")
 			sys.exit(1)
 
-	# Install requirements if requirements.txt exists
-	if REQUIREMENTS_FILE.exists():
-		print("Installing dependencies from requirements.txt...")
+	check = subprocess.run(
+		[str(python_path), "-c", "import qrcode"],
+		capture_output=True
+	)
+	if check.returncode != 0:
 		try:
-			subprocess.check_call([str(python_path), "-m", "pip", "install", "-q", "-r", str(REQUIREMENTS_FILE)])
-			print("Dependencies installed successfully.\n")
-		except subprocess.CalledProcessError as e:
-			print(f"Error installing dependencies: {e}")
-			sys.exit(1)
+			subprocess.check_call([str(python_path), "-m", "pip", "install", "-q", "qrcode"])
+		except subprocess.CalledProcessError:
+			print("Note: Could not install qrcode (offline?). QR codes will be unavailable.\n")
 
 	return python_path
 

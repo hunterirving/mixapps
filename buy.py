@@ -14,13 +14,23 @@ import urllib.request
 import json
 import platform
 import webbrowser
+import os
+import shutil
+import time
+
+
+ITUNES_MUSIC_DIR = os.path.expanduser(
+	"~/Music/Music/Media.localized/Music"
+)
+MIX_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mix")
+POLL_INTERVAL = 1  # seconds between directory scans
 
 
 def search_itunes(query):
 	"""Search iTunes for a song and return results."""
 	encoded_query = urllib.parse.quote(query)
 	url = f"https://itunes.apple.com/search?term={encoded_query}&media=music&entity=song&limit=10"
-	
+
 	try:
 		with urllib.request.urlopen(url) as response:
 			data = json.loads(response.read().decode())
@@ -58,13 +68,39 @@ def open_itunes_link(itunes_url, track_id):
 	# Use macOS 'open' command to bypass browser entirely
 	if platform.system() == 'Darwin':  # macOS
 		subprocess.run(['open', itunes_url])
-		return itunes_url
+		return True  # opened iTunes Store
 	else:
 		# For non-macOS systems, open song.link page with all platform options
 		songlink_url = f"https://song.link/i/{track_id}"
 		webbrowser.open(songlink_url)
-		return songlink_url
+		return False  # not iTunes Store
 
+
+def snapshot_audio_files(root):
+	"""Return a set of all audio file paths found recursively under root."""
+	audio_exts = {'.mp3', '.m4a', '.ogg', '.flac', '.wav', '.aiff', '.aif'}
+	found = set()
+	for dirpath, _dirnames, filenames in os.walk(root):
+		for name in filenames:
+			if os.path.splitext(name)[1].lower() in audio_exts:
+				found.add(os.path.join(dirpath, name))
+	return found
+
+
+def wait_for_new_file(watch_dir, before):
+	"""
+	Poll watch_dir recursively until an audio file appears that wasn't in the
+	before snapshot. Returns the full path of the new file.
+	"""
+	print(f"Watching for new file in:\n  {watch_dir}")
+	print("(complete your purchase in iTunes — press Ctrl+C to cancel)")
+
+	while True:
+		after = snapshot_audio_files(watch_dir)
+		new_files = after - before
+		if new_files:
+			return next(iter(new_files))
+		time.sleep(POLL_INTERVAL)
 
 def main():
 	"""Main function to run the music search CLI."""
@@ -107,7 +143,19 @@ def main():
 	else:
 		print("(Opening song.link with all platform options)")
 	
-	open_itunes_link(itunes_url, track_id)
+	opened_itunes = open_itunes_link(itunes_url, track_id)
+
+	# Only watch for the downloaded file when we opened the iTunes Store
+	if not opened_itunes:
+		return
+	
+	before = snapshot_audio_files(ITUNES_MUSIC_DIR)
+	new_file = wait_for_new_file(ITUNES_MUSIC_DIR, before)
+	
+	filename = os.path.basename(new_file)
+	dest = os.path.join(MIX_DIR, filename)
+	shutil.copy2(new_file, dest)
+	print(f"Added to /mix: {filename}")
 
 
 if __name__ == "__main__":

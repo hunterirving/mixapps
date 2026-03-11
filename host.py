@@ -70,7 +70,10 @@ def run_in_venv():
 	python_path = setup_venv()
 
 	# Re-run this script with the venv Python
-	subprocess.check_call([str(python_path), __file__, "--in-venv"])
+	try:
+		subprocess.check_call([str(python_path), __file__, "--in-venv"])
+	except (KeyboardInterrupt, subprocess.CalledProcessError):
+		pass
 	sys.exit(0)
 
 

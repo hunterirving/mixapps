@@ -94,6 +94,33 @@ def get_background_color():
 	return "#080a0c"
 
 
+def _next_cache_name(app_name, manifest_path):
+	"""Determine the next cache name by incrementing the version in an existing manifest.
+
+	If manifest.json doesn't exist or has no versioned cache_name, returns "{app_name}-v1".
+	If it already has e.g. "heaven-v1", returns "heaven-v1.1".
+	If it already has e.g. "heaven-v1.3", returns "heaven-v1.4".
+	"""
+	if manifest_path.exists():
+		try:
+			with open(manifest_path, 'r', encoding='utf-8') as f:
+				existing = json.load(f)
+			old_cache = existing.get("cache_name", "")
+			# Match pattern like "appname-v1" or "appname-v1.3"
+			match = re.match(r'^(.+)-v(\d+)(?:\.(\d+))?$', old_cache)
+			if match:
+				prefix = match.group(1)
+				major = int(match.group(2))
+				minor = int(match.group(3)) if match.group(3) is not None else 0
+				# If app was renamed, start fresh with new name
+				if prefix != app_name:
+					return f"{app_name}-v1"
+				return f"{app_name}-v{major}.{minor + 1}"
+		except (json.JSONDecodeError, KeyError):
+			pass
+	return f"{app_name}-v1"
+
+
 def generate_pwa_manifests(app_name=None, base_path=None):
 	"""Generate PWA manifest files based on tracks.json
 
@@ -107,10 +134,11 @@ def generate_pwa_manifests(app_name=None, base_path=None):
 
 	# Derived values
 	short_name = app_name
-	cache_name = app_name
+	cache_name = _next_cache_name(app_name, SCRIPT_DIR / "manifest.json")
 	app_description = f"{app_name}"
 
 	print("Generating PWA manifests...")
+	print(f"  Cache name: {cache_name}")
 
 	# Load tracks.json
 	if not TRACKS_JSON.exists():

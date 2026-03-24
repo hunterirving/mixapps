@@ -153,6 +153,10 @@ def start_server():
 
 	# Suppress default logging and broken pipe errors
 	class QuietHandler(Handler):
+		def end_headers(self):
+			self.send_header('Cache-Control', 'no-cache')
+			super().end_headers()
+
 		def log_message(self, format, *args):
 			pass
 

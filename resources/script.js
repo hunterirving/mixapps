@@ -1,5 +1,5 @@
-// Register service worker for PWA functionality
-if ('serviceWorker' in navigator) {
+// Register service worker for PWA functionality (skip on localhost to avoid caching during development)
+if ('serviceWorker' in navigator && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
 	window.addEventListener('load', () => {
 		navigator.serviceWorker.register('service-worker.js')
 			.then(registration => {

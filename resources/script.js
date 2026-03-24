@@ -337,10 +337,11 @@ let marqueeAnimating = false;
 let marqueePaused = false;
 let marqueeTimeoutId = null;
 let marqueeOriginalText = '';
-let marqueeDuration = 0;
 let marqueeHalfWidth = 0;
-let marqueeTransitionEndHandler = null;
-let marqueeCurrentTransform = 'translateX(0)';
+let marqueeRafId = null;
+let marqueeStartTime = 0;
+let marqueeElapsedBeforePause = 0;
+const marqueeSpeed = 50; // pixels per second
 
 function setupMarquee() {
 	const container = currentSongDisplay;
@@ -353,17 +354,17 @@ function setupMarquee() {
 		clearTimeout(marqueeTimeoutId);
 		marqueeTimeoutId = null;
 	}
-	if (marqueeTransitionEndHandler) {
-		textSpan.removeEventListener('transitionend', marqueeTransitionEndHandler);
-		marqueeTransitionEndHandler = null;
+	if (marqueeRafId) {
+		cancelAnimationFrame(marqueeRafId);
+		marqueeRafId = null;
 	}
 	marqueeAnimating = false;
 	marqueePaused = false;
+	marqueeElapsedBeforePause = 0;
 
 	// Reset styles
-	textSpan.style.transition = 'none';
 	textSpan.style.transform = 'translateX(0)';
-	marqueeCurrentTransform = 'translateX(0)';
+	textSpan.style.animation = 'none';
 	container.classList.remove('no-overflow');
 
 	// Store original text
@@ -396,54 +397,47 @@ function setupMarquee() {
 	// Calculate animation parameters
 	const fullWidth = textSpan.scrollWidth;
 	marqueeHalfWidth = fullWidth / 2;
-	marqueeDuration = (marqueeHalfWidth / 50) * 1000; // Adjust speed here (pixels per second)
 
 	// Start animation after a brief delay (only if not paused)
-	// Don't start animation if already paused
 	if (!marqueePaused) {
 		marqueeTimeoutId = setTimeout(() => {
 			if (marqueePaused) return;
-
-			textSpan.style.transition = `transform ${marqueeDuration}ms linear`;
-			textSpan.style.transform = `translateX(-${marqueeHalfWidth}px)`;
-			marqueeCurrentTransform = `translateX(-${marqueeHalfWidth}px)`;
-
-			// Reset and loop
-			marqueeTransitionEndHandler = () => {
-				if (!marqueeAnimating || marqueePaused) return;
-
-				textSpan.style.transition = 'none';
-				textSpan.style.transform = 'translateX(0)';
-				marqueeCurrentTransform = 'translateX(0)';
-
-				setTimeout(() => {
-					if (!marqueeAnimating || marqueePaused) return;
-					textSpan.style.transition = `transform ${marqueeDuration}ms linear`;
-					textSpan.style.transform = `translateX(-${marqueeHalfWidth}px)`;
-					marqueeCurrentTransform = `translateX(-${marqueeHalfWidth}px)`;
-				}, 50);
-			};
-
-			textSpan.addEventListener('transitionend', marqueeTransitionEndHandler);
+			marqueeStartTime = performance.now();
+			marqueeElapsedBeforePause = 0;
+			marqueeRafId = requestAnimationFrame(marqueeStep);
 		}, 1000); // Initial delay before starting scroll
 	}
 }
 
+function marqueeStep(now) {
+	if (!marqueeAnimating || marqueePaused) return;
+
+	const elapsed = marqueeElapsedBeforePause + (now - marqueeStartTime);
+	const totalDistance = elapsed * marqueeSpeed / 1000;
+	// Modulo by one segment width for seamless wrapping — no loop boundary
+	const offset = totalDistance % marqueeHalfWidth;
+
+	const textSpan = currentSongDisplay.querySelector('span');
+	if (textSpan) {
+		textSpan.style.transform = `translateX(-${offset}px)`;
+	}
+
+	marqueeRafId = requestAnimationFrame(marqueeStep);
+}
+
 function pauseMarquee() {
 	marqueePaused = true;
-	const textSpan = currentSongDisplay.querySelector('span');
-	if (!textSpan || !marqueeAnimating) return;
+	if (!marqueeAnimating) return;
 
-	// Capture current transform position
-	const computedStyle = window.getComputedStyle(textSpan);
-	const currentTransform = computedStyle.transform;
-	marqueeCurrentTransform = currentTransform;
+	// Accumulate elapsed time before this pause
+	marqueeElapsedBeforePause += performance.now() - marqueeStartTime;
 
-	// Freeze at current position
-	textSpan.style.transition = 'none';
-	textSpan.style.transform = currentTransform;
+	if (marqueeRafId) {
+		cancelAnimationFrame(marqueeRafId);
+		marqueeRafId = null;
+	}
 
-	// Clear any pending timeout
+	// Clear any pending timeout (for initial delay)
 	if (marqueeTimeoutId) {
 		clearTimeout(marqueeTimeoutId);
 		marqueeTimeoutId = null;
@@ -457,26 +451,9 @@ function resumeMarquee() {
 	const textSpan = currentSongDisplay.querySelector('span');
 	if (!textSpan) return;
 
-	// Apply the stored transform position first
-	textSpan.style.transition = 'none';
-	textSpan.style.transform = marqueeCurrentTransform;
-
-	// Force reflow to apply the transform
-	void textSpan.offsetWidth;
-
-	// Get current position from the stored transform
-	const matrix = new DOMMatrix(marqueeCurrentTransform);
-	const currentX = matrix.m41;
-
-	// Calculate remaining distance and time
-	const distanceTraveled = Math.abs(currentX);
-	const percentComplete = distanceTraveled / marqueeHalfWidth;
-	const timeRemaining = marqueeDuration * (1 - percentComplete);
-
-	// Resume animation from current position
-	textSpan.style.transition = `transform ${timeRemaining}ms linear`;
-	textSpan.style.transform = `translateX(-${marqueeHalfWidth}px)`;
-	marqueeCurrentTransform = `translateX(-${marqueeHalfWidth}px)`;
+	// Resume from where we left off
+	marqueeStartTime = performance.now();
+	marqueeRafId = requestAnimationFrame(marqueeStep);
 }
 
 // Add window resize listener to recalculate marquee

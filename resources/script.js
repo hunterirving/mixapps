@@ -95,6 +95,8 @@ fetch('manifest.json')
 
 // Audio event listeners
 audio.addEventListener('play', () => {
+	isPlaying = true;
+	updatePlayPauseButton();
 	startProgressBar();
 	const song = songs[currentSongIndex];
 	const songText = `${song.artist} – ${song.title}`;
@@ -162,6 +164,8 @@ audio.addEventListener('play', () => {
 });
 
 audio.addEventListener('pause', () => {
+	isPlaying = false;
+	updatePlayPauseButton();
 	stopProgressBar();
 	pauseMarquee();
 });

@@ -54,7 +54,7 @@ hits different, right?<br><br>
 4. **ship it**
 	- upload the entire project directory to any web host with HTTPS support (GitHub Pages, AWS S3, etc.)
 
-5. **share your mixapp**
+5. **share it**
 	- send the hosted URL to your recipient and walk them through the installation process:
 		- **iOS (Safari)**: tap `···` → `Share` → `View More` → scroll down to reveal and tap `Add to Home Screen` → `Add`
 		- **Android**:

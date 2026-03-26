@@ -226,8 +226,20 @@ function renderPlaylist() {
 		contentDiv.appendChild(artistDiv);
 
 		const loopIcon = document.createElement('span');
-		loopIcon.textContent = '🔁';
-		loopIcon.style.display = (song.looping || false) ? 'inline' : 'none';
+		loopIcon.style.width = '1.18em';
+		loopIcon.style.height = '1.18em';
+		loopIcon.style.display = (song.looping || false) ? 'inline-block' : 'none';
+		loopIcon.style.color = 'var(--text)';
+		fetch('resources/repeat.svg')
+			.then(r => r.text())
+			.then(svgText => {
+				loopIcon.innerHTML = svgText;
+				const svg = loopIcon.querySelector('svg');
+				if (svg) {
+					svg.style.width = '1.18em';
+					svg.style.height = '1.18em';
+				}
+			});
 
 		item.appendChild(contentDiv);
 		item.appendChild(loopIcon);

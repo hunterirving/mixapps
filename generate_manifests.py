@@ -8,54 +8,37 @@ import json
 import re
 from pathlib import Path
 
-def get_configuration(localhost=False):
-	"""Prompt user for configuration values
-
-	Args:
-		localhost: If True, assumes root path and only asks for app name.
-		           This enables PWA installation on localhost (iOS 18+).
-	"""
+def get_configuration():
+	"""Prompt user for configuration values"""
 	print("=" * 60)
 	print("PWA Configuration")
 	print("=" * 60)
 	print()
 
 	# Get app name
-	if localhost:
-		app_name = input("Enter a name for your mixapp (or press Return/Enter for 'my mixapp'): ").strip()
-		if not app_name:
-			app_name = "my mixapp"
-			print(f"Using default: {app_name}")
-	else:
-		app_name = input("Enter a name for your mixapp: ").strip()
-		if not app_name:
-			print("Error: App name is required")
-			exit(1)
+	app_name = input("Enter a name for your mixapp: ").strip()
+	if not app_name:
+		print("Error: App name is required")
+		exit(1)
 
-	# For localhost mode, use root path
-	if localhost:
-		base_path = "/"
-		print()
-		print("Localhost mode: Using root path for PWA installation")
-	else:
-		# Get base path with smart default
-		default_path = app_name.lower().replace(" ", "_")
-		print()
-		print(f"Enter the deployment path (or press Return/Enter for default)")
-		print(f"Default: /{default_path}/")
-		base_path_input = input("Path: ").strip()
+	# Get base path with smart default
+	default_path = app_name.lower().replace(" ", "_")
+	print()
+	print(f"Enter the deployment path (or press Return/Enter for default)")
+	print(f"Default: /{default_path}/")
+	base_path_input = input("Path: ").strip()
 
-		if base_path_input:
-			# User provided a path - ensure it has leading/trailing slashes
-			base_path = base_path_input
-			if not base_path.startswith("/"):
-				base_path = "/" + base_path
-			if not base_path.endswith("/"):
-				base_path = base_path + "/"
-		else:
-			# Use default
-			base_path = f"/{default_path}/"
-			print(f"Using default path: {base_path}")
+	if base_path_input:
+		# User provided a path - ensure it has leading/trailing slashes
+		base_path = base_path_input
+		if not base_path.startswith("/"):
+			base_path = "/" + base_path
+		if not base_path.endswith("/"):
+			base_path = base_path + "/"
+	else:
+		# Use default
+		base_path = f"/{default_path}/"
+		print(f"Using default path: {base_path}")
 
 	print()
 	print(f"Configuration:")
@@ -189,6 +172,7 @@ def generate_pwa_manifests(app_name=None, base_path=None):
 		"resources/pause.png",
 		"resources/prev.png",
 		"resources/next.png",
+		"resources/repeat.svg",
 	]
 
 	# Conditionally include optional files if they exist

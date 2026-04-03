@@ -223,7 +223,7 @@ self.addEventListener('install', (event) => {{
 				// Using Promise.allSettled to continue even if some fail
 				return Promise.allSettled(
 					absoluteUrls.map(url =>
-						fetch(url)
+						fetch(url, {{ cache: 'no-cache' }})
 							.then(response => {{
 								if (!response.ok) {{
 									throw new Error(`HTTP error! status: ${{response.status}}`);

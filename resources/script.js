@@ -802,10 +802,10 @@ function preloadResources() {
 	console.log('Preloading UI resources...');
 
 	const resources = [
-		'resources/play.png',
-		'resources/pause.png',
-		'resources/prev.png',
-		'resources/next.png',
+		'resources/play.svg',
+		'resources/pause.svg',
+		'resources/prev.svg',
+		'resources/next.svg',
 		'mix/album_art.jpg'
 	];
 

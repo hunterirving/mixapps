@@ -74,14 +74,12 @@ body {
 .control-button {
 	width: clamp(60px, calc((100vw - 58px) / 3), 120px);
 	aspect-ratio: 8 / 3;
-	background-size: contain;
-	background-repeat: no-repeat;
-	background-position: center;
 	border: none;
 	cursor: pointer;
 	margin: 0;
 	border-radius: 50%;
 	background-color: var(--text);
+	position: relative;
 	box-shadow:
 		inset -2px -2px 4px rgba(0, 0, 0, 0.3),
 		inset 2px 2px 4px rgba(255, 255, 255, 0.4),
@@ -92,6 +90,16 @@ body {
 		drop-shadow(1px 1px 0 rgba(0, 0, 0, 0.6))
 		drop-shadow(-0.5px -0.5px 0 rgba(255, 255, 255, 0.2));
 	pointer-events: auto;
+}
+
+.control-button::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background-color: var(--background);
+	mask-repeat: no-repeat;
+	mask-size: contain;
+	mask-position: center;
 }
 
 .controls-inner {
@@ -317,22 +325,22 @@ body {
 	display: none;
 }
 
-#playPause {
-	background-image: url('play.png');
-	background-position: 52.5% center;
+#playPause::before {
+	mask-image: url('play.svg');
+	mask-position: 53.5% center;
 }
 
-#playPause.pause {
-	background-image: url('pause.png');
-	background-position: center;
+#playPause.pause::before {
+	mask-image: url('pause.svg');
+	mask-position: center;
 }
 
-#prev {
-	background-image: url('prev.png');
-	background-position: 45% center;
+#prev::before {
+	mask-image: url('prev.svg');
+	mask-position: 45% center;
 }
 
-#next {
-	background-image: url('next.png');
-	background-position: 55% center;
+#next::before {
+	mask-image: url('next.svg');
+	mask-position: 55% center;
 }

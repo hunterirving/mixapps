@@ -168,10 +168,10 @@ def generate_pwa_manifests(app_name=None, base_path=None):
 		"resources/script.js",
 		"mix/tracks.json",
 		"resources/icon.png",
-		"resources/play.png",
-		"resources/pause.png",
-		"resources/prev.png",
-		"resources/next.png",
+		"resources/play.svg",
+		"resources/pause.svg",
+		"resources/prev.svg",
+		"resources/next.svg",
 		"resources/repeat.svg",
 	]
 

@@ -49,7 +49,6 @@ let CACHE_NAME = 'my-mixapp'; // Default fallback
 const staticFiles = [
 	'./',
 	'index.html',
-	'manifest.json',
 	'resources/styles.css',
 	'resources/script.js',
 	'mix/tracks.json',

@@ -124,7 +124,7 @@ def generate_pwa_manifests(app_name=None, base_path=None):
 
 	# Load tracks.json
 	if not TRACKS_JSON.exists():
-		print("Error: tracks.json not found. Run catalog.py first.")
+		print("Error: tracks.json not found. Run scan.py first.")
 		return
 
 	with open(TRACKS_JSON, 'r', encoding='utf-8') as f:

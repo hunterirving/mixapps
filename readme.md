@@ -40,7 +40,7 @@ hits different, right?<br><br>
 	- add your audio files to the `/mix` directory, or use:
 		- `./rip.py` to rip tracks from a physical CD
 		- `./buy.py` to search for tracks to purchase (opens in iTunes on MacOS, <a href="https://song.link/i/1651294855">song.link</a> otherwise)
-	- run `./catalog.py` to parse `/mix` and populate `tracks.json`, which defines the tracks available to the player. after running `./catalog.py` once, you can manually edit `tracks.json` to refine your mix.
+	- run `./scan.py` to populate `tracks.json`, which defines the tracks available to the player. after running `./scan.py` once, you can manually edit `tracks.json` to refine your mix.
 	- optionally, add an `album_art.jpg` to `/mix` to set the cover art for your mix.
 	- supported audio formats: `.mp3`, `.m4a`, `.ogg`, `.flac`, `.wav`
 

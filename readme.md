@@ -49,10 +49,10 @@ hits different, right?<br><br>
 	- run `./host.py` to start a local HTTP server for testing. you can scan the QR code printed to the terminal to test the app from any device on your local network.
 
 4. **build it**
-	- run `./build.py` and follow the interactive prompts to generate `manifest.json` and `service-worker.js`, which enable offline functionality.
+	- run `./build.py` and follow the interactive prompts to generate `manifest.json` and `service-worker.js`, which enable PWA installation and offline functionality.
 
 5. **ship it**
-	- upload the entire project directory to any web host with HTTPS support (GitHub Pages, AWS S3, etc.)
+	- upload the entire project directory to any web host with HTTPS support (GitHub Pages, Neocities, AWS S3, etc.)
 
 6. **share it**
 	- send the hosted URL to your recipient and walk them through the installation process:

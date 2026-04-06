@@ -363,7 +363,7 @@ def rip_cd():
 	if success_count > 0:
 		print(f"\nTracks saved to: {MIX_DIR}")
 		print("\nNext steps:")
-		print("  1. Run build.py to generate tracks.json with metadata")
+		print("  1. Run catalog.py to generate tracks.json with metadata")
 		print("  2. Run host.py to test your mixtape locally")
 
 		# Eject the CD

@@ -1,191 +1,319 @@
 #!/usr/bin/env python3
 """
-Scans /mix directory and populates tracks.json with metadata
-Supports MP3, M4A, OGG, FLAC, and WAV formats
-Automatically manages a virtual environment for dependencies
+Creates manifest.json and service-worker.js
+(PWA requirements) based on the contents of tracks.json
 """
 
-import os
-import sys
-import subprocess
 import json
+import re
 from pathlib import Path
 
+def get_configuration():
+	"""Prompt user for configuration values"""
+	print("=" * 60)
+	print("PWA Configuration")
+	print("=" * 60)
+	print()
+
+	# Get app name
+	app_name = input("Enter a name for your mixapp: ").strip()
+	if not app_name:
+		print("Error: App name is required")
+		exit(1)
+
+	# Get base path with smart default
+	default_path = app_name.lower().replace(" ", "_")
+	print()
+	print(f"Enter the deployment path (or press Return/Enter for default)")
+	print(f"Default: /{default_path}/")
+	base_path_input = input("Path: ").strip()
+
+	if base_path_input:
+		# User provided a path - ensure it has leading/trailing slashes
+		base_path = base_path_input
+		if not base_path.startswith("/"):
+			base_path = "/" + base_path
+		if not base_path.endswith("/"):
+			base_path = base_path + "/"
+	else:
+		# Use default
+		base_path = f"/{default_path}/"
+		print(f"Using default path: {base_path}")
+
+	print()
+	print(f"Configuration:")
+	print(f"  App Name: {app_name}")
+	print(f"  Base Path: {base_path}")
+	print()
+
+	return app_name, base_path
+
+# File paths (no need to edit these)
 SCRIPT_DIR = Path(__file__).parent.absolute()
-VENV_DIR = SCRIPT_DIR / "venv"
-MIX_DIR = SCRIPT_DIR / "mix"
-OUTPUT_FILE = MIX_DIR / "tracks.json"
+TRACKS_JSON = SCRIPT_DIR / "mix" / "tracks.json"
+STYLES_CSS = SCRIPT_DIR / "resources" / "styles.css"
 
 
-def setup_venv():
-	"""Create and set up virtual environment if it doesn't exist"""
-	# Determine the path to pip and python in the venv
-	if sys.platform == "win32":
-		pip_path = VENV_DIR / "Scripts" / "pip"
-		python_path = VENV_DIR / "Scripts" / "python"
-	else:
-		pip_path = VENV_DIR / "bin" / "pip"
-		python_path = VENV_DIR / "bin" / "python3"
+def get_background_color():
+	"""Extract the --background CSS variable from styles.css"""
+	if not STYLES_CSS.exists():
+		print("Warning: styles.css not found. Using default color.")
+		return "#080a0c"
 
-	# Check if venv needs to be created or recreated
-	if not VENV_DIR.exists() or not python_path.exists():
-		if VENV_DIR.exists():
-			print("Virtual environment incomplete, recreating...")
-			import shutil
-			shutil.rmtree(VENV_DIR)
-		else:
-			print("Creating virtual environment...")
+	with open(STYLES_CSS, 'r', encoding='utf-8') as f:
+		content = f.read()
 
-		try:
-			subprocess.check_call([sys.executable, "-m", "venv", str(VENV_DIR)])
-			print("Virtual environment created successfully.")
-		except subprocess.CalledProcessError as e:
-			print(f"Error creating virtual environment: {e}")
-			sys.exit(1)
-
-	# Ensure pip is available (sometimes venv doesn't include it)
-	if not pip_path.exists():
-		print("Installing pip in virtual environment...")
-		try:
-			subprocess.check_call([str(python_path), "-m", "ensurepip", "--upgrade"])
-		except subprocess.CalledProcessError as e:
-			print(f"Error ensuring pip: {e}")
-			sys.exit(1)
-
-	check = subprocess.run(
-		[str(python_path), "-c", "import mutagen"],
-		capture_output=True
+	# Look for --background: <color>; pattern
+	match = re.search(
+		r'--background:\s*([#a-zA-Z0-9(),.\s]+?)\s*;',
+		content
 	)
-	if check.returncode != 0:
+	if match:
+		color = match.group(1).strip()
+		print(f"Found background color in styles.css: {color}")
+		return color
+
+	print("Warning: --background not found in styles.css. Using default color.")
+	return "#080a0c"
+
+
+def _next_cache_name(app_name, manifest_path):
+	"""Determine the next cache name by incrementing the version in an existing manifest.
+
+	If manifest.json doesn't exist or has no versioned cache_name, returns "{app_name}-v1".
+	If it already has e.g. "heaven-v1", returns "heaven-v1.1".
+	If it already has e.g. "heaven-v1.3", returns "heaven-v1.4".
+	"""
+	if manifest_path.exists():
 		try:
-			subprocess.check_call([str(python_path), "-m", "pip", "install", "-q", "mutagen"])
-		except subprocess.CalledProcessError:
-			print("Note: Could not install mutagen (offline?). Metadata will be derived from filenames.\n")
+			with open(manifest_path, 'r', encoding='utf-8') as f:
+				existing = json.load(f)
+			old_cache = existing.get("cache_name", "")
+			# Match pattern like "appname-v1" or "appname-v1.3"
+			match = re.match(r'^(.+)-v(\d+)(?:\.(\d+))?$', old_cache)
+			if match:
+				prefix = match.group(1)
+				major = int(match.group(2))
+				minor = int(match.group(3)) if match.group(3) is not None else 0
+				# If app was renamed, start fresh with new name
+				if prefix != app_name:
+					return f"{app_name}-v1"
+				return f"{app_name}-v{major}.{minor + 1}"
+		except (json.JSONDecodeError, KeyError):
+			pass
+	return f"{app_name}-v1"
 
-	return python_path
 
+def generate_pwa_manifests(app_name=None, base_path=None):
+	"""Generate PWA manifest files based on tracks.json
 
-def run_in_venv():
-	"""Re-run this script in the virtual environment"""
-	python_path = setup_venv()
+	Args:
+		app_name: Name of the app. If None, will be prompted via get_configuration()
+		base_path: Base path for the app. If None, will be prompted via get_configuration()
+	"""
+	# Get configuration if not provided
+	if app_name is None or base_path is None:
+		app_name, base_path = get_configuration()
 
-	# Re-run this script with the venv Python
-	print("Running scanner in virtual environment...\n")
-	subprocess.check_call([str(python_path), __file__, "--in-venv"])
-	sys.exit(0)
+	# Derived values
+	short_name = app_name
+	cache_name = _next_cache_name(app_name, SCRIPT_DIR / "manifest.json")
+	app_description = f"{app_name}"
 
+	print("Generating PWA manifests...")
+	print(f"  Cache name: {cache_name}")
 
-def scan_tracks():
-	"""Main function to scan audio files and generate tracks.json"""
-	# Import mutagen here (only after venv is active)
-	try:
-		from mutagen import File as MutagenFile
-		has_mutagen = True
-	except ImportError:
-		MutagenFile = None
-		has_mutagen = False
-		print("Mutagen not available. Metadata will be derived from filenames.\n")
+	# Load tracks.json
+	if not TRACKS_JSON.exists():
+		print("Error: tracks.json not found. Run catalog.py first.")
+		return
 
-	# Supported audio formats
-	SUPPORTED_EXTENSIONS = ('.mp3', '.m4a', '.ogg', '.flac', '.wav')
+	with open(TRACKS_JSON, 'r', encoding='utf-8') as f:
+		tracks = json.load(f)
 
-	# Check if tracks directory exists, create if it doesn't
-	if not MIX_DIR.exists():
-		print(f"Creating {MIX_DIR.name} directory...")
-		MIX_DIR.mkdir(parents=True, exist_ok=True)
-		print(f"✓ {MIX_DIR.name} directory created.")
-		print(f"\nAdd audio files to the {MIX_DIR.name} directory and run this script again.")
-		print(f"Supported formats: {', '.join(SUPPORTED_EXTENSIONS)}")
-		sys.exit(0)
+	# Get background color from styles.css
+	background_color = get_background_color()
 
-	# Find all supported audio files
-	audio_files = [f for f in MIX_DIR.iterdir() if f.suffix.lower() in SUPPORTED_EXTENSIONS]
-
-	if not audio_files:
-		print(f"No audio files found in {MIX_DIR}")
-		print(f"\nPlease add audio files to the {MIX_DIR.name} directory and run this script again.")
-		print(f"Supported formats: {', '.join(SUPPORTED_EXTENSIONS)}")
-		sys.exit(0)
-
-	print(f"Found {len(audio_files)} audio file(s). Extracting metadata...\n")
-
-	tracks = []
-
-	for audio_file in sorted(audio_files):
-		try:
-			title = None
-			artist = None
-
-			if has_mutagen:
-				audio = MutagenFile(audio_file, easy=True)
-				if audio and audio.tags:
-					title = audio.tags.get('title', [None])[0]
-					artist = audio.tags.get('artist', [None])[0]
-
-			# Fallback to filename for title if not found
-			if not title:
-				title = audio_file.stem  # filename without extension
-
-			# Fallback to "Unknown Artist" if not found
-			if not artist:
-				artist = "Unknown Artist"
-
-			track_info = {
-				"title": title,
-				"artist": artist,
-				"filename": audio_file.name
+	# Generate manifest.json
+	manifest = {
+		"id": base_path,
+		"name": app_name,
+		"short_name": short_name,
+		"description": app_description,
+		"start_url": base_path,
+		"scope": base_path,
+		"display": "standalone",
+		"background_color": background_color,
+		"theme_color": background_color,
+		"cache_name": cache_name,  # Custom field for script.js to use
+		"icons": [
+			{
+				"src": f"{base_path}resources/icon.png",
+				"sizes": "640x640",
+				"type": "image/png",
+				"purpose": "any maskable"
 			}
+		]
+	}
 
-			tracks.append(track_info)
-			print(f"✓ {track_info['artist']} - {track_info['title']}")
+	with open(SCRIPT_DIR / "manifest.json", 'w', encoding='utf-8') as f:
+		json.dump(manifest, f, indent=2)
+	print("✓ Generated manifest.json")
 
-		except Exception as e:
-			print(f"✗ Error reading {audio_file.name}: {e}")
-			continue
+	# Build static files list for service worker
+	static_files = [
+		"./",
+		"index.html",
+		"manifest.json",
+		"resources/styles.css",
+		"resources/script.js",
+		"mix/tracks.json",
+		"resources/icon.png",
+		"resources/play.svg",
+		"resources/pause.svg",
+		"resources/prev.svg",
+		"resources/next.svg",
+		"resources/repeat.svg",
+	]
 
-	# Check if ALL titles start with numbers
-	# If so, strip the leading numbers from all titles
-	import re
-	all_have_leading_numbers = all(
-		re.match(r'^\d+\s*[-.]?\s*', track['title'])
-		for track in tracks
-	)
+	# Conditionally include optional files if they exist
+	for optional_file in ["album_art.jpg", "custom.css", "custom.js"]:
+		if (SCRIPT_DIR / "mix" / optional_file).exists():
+			static_files.append(f"mix/{optional_file}")
 
-	if all_have_leading_numbers and tracks:
-		print("\nDetected track numbers in all titles. Stripping them...")
-		for track in tracks:
-			original_title = track['title']
-			# Remove leading number pattern
-			cleaned_title = re.sub(r'^\d+\s*[-.]?\s*', '', original_title)
-			if cleaned_title:  # Only update if something remains
-				track['title'] = cleaned_title
-				if cleaned_title != original_title:
-					print(f"  {original_title} → {cleaned_title}")
+	static_files_js = json.dumps(static_files)
 
-	if not tracks:
-		print("\nNo valid audio files could be processed.")
-		sys.exit(1)
+	# Generate service-worker.js
+	service_worker_content = f'''// Auto-generated service worker for {app_name} PWA
+const CACHE_NAME = '{cache_name}';
 
-	# Write to tracks.json
-	try:
-		with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
-			json.dump(tracks, f, indent="\t", ensure_ascii=False)
+// Get the base path from the service worker location
+const getBasePath = () => {{
+	const swPath = self.location.pathname;
+	return swPath.substring(0, swPath.lastIndexOf('/') + 1);
+}};
 
-		print(f"\n✓ Successfully generated {OUTPUT_FILE.name} with {len(tracks)} track(s).")
+const basePath = getBasePath();
 
-	except Exception as e:
-		print(f"\nError writing {OUTPUT_FILE.name}: {e}")
-		sys.exit(1)
+// Static files to cache on install
+const STATIC_FILES = {static_files_js};
 
+// Install event - cache static resources
+// Audio files will be cached by the main app's blob preloading system
+self.addEventListener('install', (event) => {{
+	console.log('Service Worker installing...', 'Base path:', basePath);
+	event.waitUntil(
+		caches.open(CACHE_NAME).then(cache => {{
+			// Make URLs absolute relative to service worker location
+			const absoluteUrls = STATIC_FILES.map(url => {{
+				if (url === './') return basePath;
+				return new URL(url, basePath + 'index.html').href;
+			}});
+			console.log('Caching', absoluteUrls.length, 'static resources');
 
-def main():
-	"""Main entry point"""
-	# Check if we're already running in venv
-	if "--in-venv" not in sys.argv:
-		run_in_venv()
-	else:
-		scan_tracks()
+			// Cache files individually with better error handling
+			// Using Promise.allSettled to continue even if some fail
+			return Promise.allSettled(
+				absoluteUrls.map(url =>
+					fetch(url, {{ cache: 'no-cache' }})
+						.then(response => {{
+							if (!response.ok) {{
+								throw new Error(`HTTP error! status: ${{response.status}}`);
+							}}
+							return cache.put(url, response);
+						}})
+						.then(() => console.log('✓ Cached:', url))
+						.catch(err => {{
+							console.error('✗ Failed to cache:', url, err);
+							throw err;
+						}})
+				)
+			).then(results => {{
+				const failed = results.filter(r => r.status === 'rejected');
+				const succeeded = results.filter(r => r.status === 'fulfilled');
+				console.log(`Cached ${{succeeded.length}}/${{results.length}} static resources`);
+				if (failed.length > 0) {{
+					console.warn(`Failed to cache ${{failed.length}} resources`);
+				}}
+			}});
+		}}).then(() => {{
+			console.log('Service Worker installation complete');
+			return self.skipWaiting();
+		}}).catch(error => {{
+			console.error('Service Worker installation failed:', error);
+		}})
+	);
+}});
+
+// Activate event - clean up old caches
+self.addEventListener('activate', (event) => {{
+	console.log('Service Worker activating...');
+	event.waitUntil(
+		caches.keys().then((cacheNames) => {{
+			return Promise.all(
+				cacheNames.map((cacheName) => {{
+					if (cacheName !== CACHE_NAME) {{
+						console.log('Deleting old cache:', cacheName);
+						return caches.delete(cacheName);
+					}}
+				}})
+			);
+		}}).then(() => self.clients.claim())
+	);
+}});
+
+// Fetch event - cache first, network fallback
+self.addEventListener('fetch', (event) => {{
+	// Ignore non-http(s) requests like blob: URLs, data: URLs, chrome-extension:, etc.
+	if (!event.request.url.startsWith('http')) {{
+		return;
+	}}
+
+	event.respondWith(
+		caches.match(event.request)
+			.then((cachedResponse) => {{
+				if (cachedResponse) {{
+					console.log('✓ Serving from cache:', event.request.url);
+					return cachedResponse;
+				}}
+
+				// Not in cache - try network
+				console.log('⟳ Fetching from network:', event.request.url);
+				return fetch(event.request)
+					.then((networkResponse) => {{
+						// Check if valid response
+						if (!networkResponse || networkResponse.status !== 200 || networkResponse.type === 'error') {{
+							return networkResponse;
+						}}
+
+						// Clone and cache for future offline use
+						const responseToCache = networkResponse.clone();
+						caches.open(CACHE_NAME)
+							.then((cache) => {{
+								cache.put(event.request, responseToCache);
+								console.log('✓ Cached from network:', event.request.url);
+							}})
+							.catch(err => console.error('Failed to cache:', err));
+
+						return networkResponse;
+					}})
+					.catch((error) => {{
+						console.error('✗ Network fetch failed for:', event.request.url, error);
+						throw error;
+					}});
+			}})
+	);
+}});
+'''
+
+	with open(SCRIPT_DIR / "service-worker.js", 'w', encoding='utf-8') as f:
+		f.write(service_worker_content)
+	print("✓ Generated service-worker.js")
+	print()
+	print("PWA manifests generated successfully!")
 
 
 if __name__ == "__main__":
-	main()
+	# When run directly, get configuration and generate manifests
+	app_name, base_path = get_configuration()
+	generate_pwa_manifests(app_name, base_path)

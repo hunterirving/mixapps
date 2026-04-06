@@ -1,6 +1,6 @@
 # 💿 mixapps
 
-resurrect the lost art of <a href="https://ihavethatonvinyl.com/liner-notes/the-lost-art-of-the-mixtape/">mixtape</a><a href="https://melos.audio/blogs/information/the-lost-art-of-the-mixtape">-making</a> by packaging folders of .mp3s as progressive web apps.
+resurrect the lost art of <a href="https://ihavethatonvinyl.com/liner-notes/the-lost-art-of-the-mixtape/">mixtape</a><a href="https://melos.audio/blogs/information/the-lost-art-of-the-mixtape">-making</a> by packaging playlists as shareable apps that work offline.
 
 <p align="center">
 	<img src="readme_images/collection.jpeg" width="550">
@@ -10,7 +10,7 @@ resurrect the lost art of <a href="https://ihavethatonvinyl.com/liner-notes/the-
 <a href="https://hunterirving.com/vibe_capsule">public domain beats to code to ↗</a>
 
 ## key features
-- mixtapes as self-contained apps that work completely offline on Windows, MacOS, Linux, iOS, and Android
+- mixtapes as progressive web apps that work completely offline on Windows, MacOS, Linux, iOS, and Android
 - support for `mp3`, `m4a`, `ogg`, `flac`, and `wav` audio formats
 - highly customizable interface (just add CSS!)
 

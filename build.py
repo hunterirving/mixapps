@@ -52,28 +52,27 @@ def get_configuration():
 SCRIPT_DIR = Path(__file__).parent.absolute()
 TRACKS_JSON = SCRIPT_DIR / "mix" / "tracks.json"
 STYLES_CSS = SCRIPT_DIR / "resources" / "styles.css"
+CUSTOM_CSS = SCRIPT_DIR / "mix" / "custom.css"
 
 
 def get_background_color():
-	"""Extract the --background CSS variable from styles.css"""
-	if not STYLES_CSS.exists():
-		print("Warning: styles.css not found. Using default color.")
-		return "#080a0c"
+	"""Extract the --background CSS variable, preferring custom.css over styles.css"""
+	# Check custom.css first (overrides styles.css)
+	for css_file in [CUSTOM_CSS, STYLES_CSS]:
+		if not css_file.exists():
+			continue
+		with open(css_file, 'r', encoding='utf-8') as f:
+			content = f.read()
+		match = re.search(
+			r'--background:\s*([#a-zA-Z0-9(),.\s]+?)\s*;',
+			content
+		)
+		if match:
+			color = match.group(1).strip()
+			print(f"Found background color in {css_file.name}: {color}")
+			return color
 
-	with open(STYLES_CSS, 'r', encoding='utf-8') as f:
-		content = f.read()
-
-	# Look for --background: <color>; pattern
-	match = re.search(
-		r'--background:\s*([#a-zA-Z0-9(),.\s]+?)\s*;',
-		content
-	)
-	if match:
-		color = match.group(1).strip()
-		print(f"Found background color in styles.css: {color}")
-		return color
-
-	print("Warning: --background not found in styles.css. Using default color.")
+	print("Warning: --background not found in any CSS file. Using default color.")
 	return "#080a0c"
 
 

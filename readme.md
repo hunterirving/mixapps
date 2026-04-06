@@ -10,7 +10,7 @@ resurrect the lost art of <a href="https://ihavethatonvinyl.com/liner-notes/the-
 <a href="https://hunterirving.com/vibe_capsule">public domain beats to code to ↗</a>
 
 ## key features
-- mixtapes as progressive web apps that work completely offline on Windows, MacOS, Linux, iOS, and Android
+- mixtapes as <a href="https://hunterirving.github.io/web_workshop/pages/pwa/">Progressive Web Apps</a> that work completely offline on Windows, MacOS, Linux, iOS, and Android
 - support for `mp3`, `m4a`, `ogg`, `flac`, and `wav` audio formats
 - highly customizable interface (just add CSS!)
 

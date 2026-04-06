@@ -11,7 +11,7 @@ resurrect the lost art of <a href="https://ihavethatonvinyl.com/liner-notes/the-
 
 ## key features
 - mixtapes as self-contained apps that work completely offline on Windows, MacOS, Linux, iOS, and Android
-- lock screen media controls (iOS & Android) and keyboard media key support
+- support for `mp3`, `m4a`, `ogg`, `flac`, and `wav` audio formats
 - highly customizable interface (just add CSS!)
 
 <p align="center">
@@ -36,37 +36,37 @@ now it's theirs.
 hits different, right?<br><br>
 
 ## quickstart
-1. **prep your playlist**
+1. **load it**
 	- add your audio files to the `/mix` directory, or use:
 		- `./rip.py` to rip tracks from a physical CD
 		- `./buy.py` to search for tracks to purchase (opens in iTunes on MacOS, <a href="https://song.link/i/1651294855">song.link</a> otherwise)
-	- run `./scan.py` to populate `tracks.json`, which defines the tracks available to the player. after running `./scan.py` once, you can manually edit `tracks.json` to refine your mix.
-	- optionally, add an `album_art.jpg` to `/mix` to set the cover art for your mix.
-	- supported audio formats: `.mp3`, `.m4a`, `.ogg`, `.flac`, `.wav`
 
-2. **soundcheck**
+2. **scan it**
+	- run `./scan.py` to generate `tracks.json`, which defines the tracks available to the player.
+		- after running `./scan.py` once, you can manually edit `tracks.json` to refine your mix.
+
+3. **test it**
 	- run `./host.py` to start a local HTTP server for testing. you can scan the QR code printed to the terminal to test the app from any device on your local network.
 
-3. **manifesting**
-	- run `./build.py` and follow the interactive prompts to specify an app name and the remote server path where your mixapp will be hosted.
-		- this creates the config files that enable offline functionality: `manifest.json` and `service-worker.js`
+4. **build it**
+	- run `./build.py` and follow the interactive prompts to generate `manifest.json` and `service-worker.js`, which enable offline functionality.
 
-4. **ship it**
+5. **ship it**
 	- upload the entire project directory to any web host with HTTPS support (GitHub Pages, AWS S3, etc.)
 
-5. **share it**
+6. **share it**
 	- send the hosted URL to your recipient and walk them through the installation process:
 		- **iOS (Safari)**: tap `···` → `Share` → `View More` → scroll down to reveal and tap `Add to Home Screen` → `Add`
 		- **Android**:
 			- **Firefox**: tap `⋮` → `··· More` → Add to Home screen → Add to home screen
 			- **Chrome**: tap `⋮` → Add to Home screen → Install
 		- for detailed PWA installation steps for your browser/OS, <a href="https://hunterirving.github.io/web_workshop/pages/pwa/">click here</a>.
-	- after the initial download and cache, mixapps work completely offline and behave like native applications<br><br>
+	- after the initial download and cache, mixapps work completely offline and behave like native applications ⤵<br><br>
 	<img src="readme_images/lock_screen.jpeg" width="275"><br>
 	(pictured: integration with iOS lockscreen controls)
 
 ## customization
-add `custom.css` and/or `custom.js` to your `/mix` folder to customize your mixapp's appearance and behavior. these files are automatically loaded if present.
+add `custom.css`, `custom.js` and/or `album_art.jpg` to `/mix` to customize your mixapp's appearance and behavior. these files are automatically loaded if present.
 
 ## intellectual property notice
 ensure you have the right to distribute any media files you include in public mixapps. personal archival backups are for your own use. sharing them with others, even as a gift, is not covered by fair use or backup exceptions.

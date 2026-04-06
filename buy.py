@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Search for songs and open purchase links.
+Search for tracks and open purchase links.
 
 Usage:
 	./buy.py <search query>
@@ -27,7 +27,7 @@ POLL_INTERVAL = 1  # seconds between directory scans
 
 
 def search_itunes(query):
-	"""Search iTunes for a song and return results."""
+	"""Search iTunes for a track and return results."""
 	encoded_query = urllib.parse.quote(query)
 	url = f"https://itunes.apple.com/search?term={encoded_query}&media=music&entity=song&limit=10"
 
@@ -92,8 +92,8 @@ def wait_for_new_file(watch_dir, before):
 	Poll watch_dir recursively until an audio file appears that wasn't in the
 	before snapshot. Returns the full path of the new file.
 	"""
-	print(f"Watching for new file in:\n  {watch_dir}")
-	print("(complete your purchase in iTunes — press Ctrl+C to cancel)")
+	print(f"Watching for new file...")
+	print("(complete your purchase in iTunes or press Ctrl+C to cancel)")
 
 	while True:
 		after = snapshot_audio_files(watch_dir)
@@ -108,7 +108,7 @@ def main():
 	if len(sys.argv) > 1:
 		query = ' '.join(sys.argv[1:])
 	else:
-		query = input("Enter song name, artist, or both: ").strip()
+		query = input("Enter track name, artist, or both: ").strip()
 	
 	if not query:
 		print("No search query provided.")
@@ -128,7 +128,7 @@ def main():
 	
 	# Extract track info
 	artist = best_track.get('artistName', 'Unknown')
-	song = best_track.get('trackName', 'Unknown')
+	track = best_track.get('trackName', 'Unknown')
 	itunes_url = best_track.get('trackViewUrl')
 	track_id = best_track.get('trackId')
 	
@@ -137,11 +137,11 @@ def main():
 		return
 	
 	# Open iTunes purchase page (macOS) or song.link (other platforms)
-	print(f"Opening: {artist} - {song}")
+	print(f"Opening: {artist} - {track}")
 	if platform.system() == 'Darwin':
-		print("(Opening iTunes Store directly)")
+		print("Opening iTunes Store directly...")
 	else:
-		print("(Opening song.link with all platform options)")
+		print("Opening song.link with all platform options...")
 	
 	opened_itunes = open_itunes_link(itunes_url, track_id)
 

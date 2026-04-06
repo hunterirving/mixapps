@@ -39,8 +39,8 @@ hits different, right?<br><br>
 1. **prep your playlist**
 	- add your audio files to the `/mix` directory, or use:
 		- `./rip.py` to rip tracks from a physical CD
-		- `./buy.py` to search for songs to purchase (opens in iTunes on MacOS, <a href="https://song.link/i/1651294855">song.link</a> otherwise)
-	- run `./build.py` to parse `/mix` and populate `tracks.json`, which defines the songs available to the player. after running `./build.py` once, you can manually edit `tracks.json` to refine your mix.
+		- `./buy.py` to search for tracks to purchase (opens in iTunes on MacOS, <a href="https://song.link/i/1651294855">song.link</a> otherwise)
+	- run `./build.py` to parse `/mix` and populate `tracks.json`, which defines the tracks available to the player. after running `./build.py` once, you can manually edit `tracks.json` to refine your mix.
 	- optionally, add an `album_art.jpg` to `/mix` to set the cover art for your mix.
 	- supported audio formats: `.mp3`, `.m4a`, `.ogg`, `.flac`, `.wav`
 
@@ -49,7 +49,7 @@ hits different, right?<br><br>
 
 3. **manifesting**
 	- run `./generate_manifests.py` and follow the interactive prompts to specify an app name and the remote server path where your app will be hosted.
-		- this creates the config files that enable offline functionality: `manifest.json`, `resource-manifest.json`, and `service-worker.js`.
+		- this creates the config files that enable offline functionality: `manifest.json` and `service-worker.js`.
 
 4. **ship it**
 	- upload the entire project directory to any web host with HTTPS support (GitHub Pages, AWS S3, etc.)

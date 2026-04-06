@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Creates manifest.json, resource-manifest.json, and service-worker.js
+Creates manifest.json and service-worker.js
 based on the contents of tracks.json
 """
 
@@ -160,10 +160,11 @@ def generate_pwa_manifests(app_name=None, base_path=None):
 		json.dump(manifest, f, indent=2)
 	print("✓ Generated manifest.json")
 
-	# Generate resource-manifest.json
+	# Build static files list for service worker
 	static_files = [
 		"./",
 		"index.html",
+		"manifest.json",
 		"resources/styles.css",
 		"resources/script.js",
 		"mix/tracks.json",
@@ -180,20 +181,11 @@ def generate_pwa_manifests(app_name=None, base_path=None):
 		if (SCRIPT_DIR / "mix" / optional_file).exists():
 			static_files.append(f"mix/{optional_file}")
 
-	resource_manifest = {
-		"static_files": static_files,
-		"tracks": [f"mix/{track['filename']}" for track in tracks]
-	}
-
-	with open(SCRIPT_DIR / "resource-manifest.json", 'w', encoding='utf-8') as f:
-		json.dump(resource_manifest, f, indent=2)
-	print("✓ Generated resource-manifest.json")
+	static_files_js = json.dumps(static_files)
 
 	# Generate service-worker.js
-	static_files = resource_manifest["static_files"]
 	service_worker_content = f'''// Auto-generated service worker for {app_name} PWA
 const CACHE_NAME = '{cache_name}';
-const staticFilesToCache = {json.dumps(static_files, indent=2)};
 
 // Get the base path from the service worker location
 const getBasePath = () => {{
@@ -203,55 +195,53 @@ const getBasePath = () => {{
 
 const basePath = getBasePath();
 
-// Install event - cache only static resources (not audio files)
+// Static files to cache on install
+const STATIC_FILES = {static_files_js};
+
+// Install event - cache static resources
 // Audio files will be cached by the main app's blob preloading system
 self.addEventListener('install', (event) => {{
 	console.log('Service Worker installing...', 'Base path:', basePath);
 	event.waitUntil(
-		caches.open(CACHE_NAME)
-			.then((cache) => {{
-				console.log('Opened cache');
-				// Make URLs absolute relative to service worker location
-				const absoluteUrls = staticFilesToCache.map(url => {{
-					if (url === './') return basePath;
-					return new URL(url, basePath + 'index.html').href;
-				}});
-				console.log('Caching', absoluteUrls.length, 'static resources');
-				console.log('URLs to cache:', absoluteUrls);
+		caches.open(CACHE_NAME).then(cache => {{
+			// Make URLs absolute relative to service worker location
+			const absoluteUrls = STATIC_FILES.map(url => {{
+				if (url === './') return basePath;
+				return new URL(url, basePath + 'index.html').href;
+			}});
+			console.log('Caching', absoluteUrls.length, 'static resources');
 
-				// Cache files individually with better error handling
-				// Using Promise.allSettled to continue even if some fail
-				return Promise.allSettled(
-					absoluteUrls.map(url =>
-						fetch(url, {{ cache: 'no-cache' }})
-							.then(response => {{
-								if (!response.ok) {{
-									throw new Error(`HTTP error! status: ${{response.status}}`);
-								}}
-								return cache.put(url, response);
-							}})
-							.then(() => console.log('✓ Cached:', url))
-							.catch(err => {{
-								console.error('✗ Failed to cache:', url, err);
-								throw err;
-							}})
-					)
-				).then(results => {{
-					const failed = results.filter(r => r.status === 'rejected');
-					const succeeded = results.filter(r => r.status === 'fulfilled');
-					console.log(`Cached ${{succeeded.length}}/${{results.length}} static resources`);
-					if (failed.length > 0) {{
-						console.warn(`Failed to cache ${{failed.length}} resources`);
-					}}
-				}});
-			}})
-			.then(() => {{
-				console.log('Service Worker installation complete');
-				return self.skipWaiting();
-			}})
-			.catch(error => {{
-				console.error('Service Worker installation failed:', error);
-			}})
+			// Cache files individually with better error handling
+			// Using Promise.allSettled to continue even if some fail
+			return Promise.allSettled(
+				absoluteUrls.map(url =>
+					fetch(url, {{ cache: 'no-cache' }})
+						.then(response => {{
+							if (!response.ok) {{
+								throw new Error(`HTTP error! status: ${{response.status}}`);
+							}}
+							return cache.put(url, response);
+						}})
+						.then(() => console.log('✓ Cached:', url))
+						.catch(err => {{
+							console.error('✗ Failed to cache:', url, err);
+							throw err;
+						}})
+				)
+			).then(results => {{
+				const failed = results.filter(r => r.status === 'rejected');
+				const succeeded = results.filter(r => r.status === 'fulfilled');
+				console.log(`Cached ${{succeeded.length}}/${{results.length}} static resources`);
+				if (failed.length > 0) {{
+					console.warn(`Failed to cache ${{failed.length}} resources`);
+				}}
+			}});
+		}}).then(() => {{
+			console.log('Service Worker installation complete');
+			return self.skipWaiting();
+		}}).catch(error => {{
+			console.error('Service Worker installation failed:', error);
+		}})
 	);
 }});
 

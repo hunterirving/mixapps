@@ -21,7 +21,6 @@ mix/*
 
 # auto-generated PWA files
 manifest.json
-resource-manifest.json
 service-worker.js
 
 # Personal deployment scripts

@@ -198,7 +198,7 @@ body {
 	}
 }
 
-.current-song {
+.current-track {
 	text-align: left;
 	padding-left: 15px;
 	padding-bottom: 10px;
@@ -212,13 +212,13 @@ body {
 	position: relative;
 }
 
-.current-song span {
+.current-track span {
 	display: inline-block;
 	white-space: nowrap;
 	will-change: transform;
 }
 
-.current-song.no-overflow span {
+.current-track.no-overflow span {
 	overflow: hidden;
 	text-overflow: hidden;
 	max-width: 100%;

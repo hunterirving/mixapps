@@ -15,7 +15,7 @@ const playPauseBtn = document.getElementById('playPause');
 const prevBtn = document.getElementById('prev');
 const nextBtn = document.getElementById('next');
 const playlist = document.getElementById('playlist');
-const currentSongDisplay = document.getElementById('currentSong');
+const currentTrackDisplay = document.getElementById('currentTrack');
 const progressBar = document.getElementById('progressBar');
 const progressContainer = document.getElementById('progressContainer');
 const audio = document.getElementById('audioPlayer');
@@ -32,20 +32,52 @@ function shuffleArray(array) {
 	return shuffled;
 }
 
-let currentSongIndex = 0;
+let currentTrackIndex = 0;
 let isPlaying = false;
 let progressInterval;
 let playerReady = false;
-let songs = [];
+let tracks = [];
 let animationFrameId = null;
 let prePlaySeekTime = 0;
 let preloadedAudio = {}; // Cache for preloaded audio elements
 let currentPreloadIndex = 0;
-let priorityPreloadQueue = []; // Songs requested by user that need priority preloading
+let priorityPreloadQueue = []; // Tracks requested by user that need priority preloading
 let isPreloadingPriority = false;
-let totalBytesLoaded = 0; // Track total filesize of all preloaded songs
-let cachedTracks = new Set(); // Track which songs are cached for offline use
+let totalBytesLoaded = 0; // Track total filesize of all preloaded tracks
+let cachedTracks = new Set(); // Track which tracks are cached for offline use
 let CACHE_NAME = 'my-mixapp'; // Default fallback
+const staticFiles = [
+	'./',
+	'index.html',
+	'manifest.json',
+	'resources/styles.css',
+	'resources/script.js',
+	'mix/tracks.json',
+	'resources/icon.png',
+	'resources/play.svg',
+	'resources/pause.svg',
+	'resources/prev.svg',
+	'resources/next.svg',
+	'resources/repeat.svg',
+];
+
+// Retry fetch with exponential backoff
+async function fetchWithRetry(url, maxRetries = 4, baseDelay = 2000) {
+	for (let attempt = 0; attempt <= maxRetries; attempt++) {
+		try {
+			const response = await fetch(url);
+			if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+			}
+			return response;
+		} catch (error) {
+			if (attempt === maxRetries) throw error;
+			const delay = baseDelay * Math.pow(2, attempt);
+			console.warn(`Fetch failed for ${url}, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})...`);
+			await new Promise(resolve => setTimeout(resolve, delay));
+		}
+	}
+}
 
 // Load cache name from manifest.json first, then load tracks
 fetch('manifest.json')
@@ -63,34 +95,43 @@ fetch('manifest.json')
 			}
 		}
 
-		return fetch('mix/tracks.json');
+		// Probe for optional files and add them to staticFiles
+		const optionalFiles = ['mix/album_art.jpg', 'mix/custom.css', 'mix/custom.js'];
+		return Promise.all([
+			...optionalFiles.map(f =>
+				fetch(f, { method: 'HEAD' })
+					.then(r => { if (r.ok) staticFiles.push(f); })
+					.catch(() => {})
+			),
+			fetch('mix/tracks.json')
+				.then(r => {
+					if (!r.ok) throw new Error('tracks.json not found');
+					return r.json();
+				})
+		]);
 	})
-	.then(response => {
-		if (!response.ok) {
-			throw new Error('tracks.json not found');
-		}
-		return response.json();
-	})
-	.then(data => {
-		songs = shuffle ? shuffleArray(data) : data;
-		if (songs.length > 0) {
+	.then((results) => {
+		const data = results[results.length - 1];
+
+		tracks = shuffle ? shuffleArray(data) : data;
+		if (tracks.length > 0) {
 			playerReady = true;
-			updateCurrentSongDisplay(`Ready to play: ${songs[0].artist} – ${songs[0].title}`);
+			updateCurrentTrackDisplay(`Ready to play: ${tracks[0].artist} – ${tracks[0].title}`);
 			// Check which tracks are already cached before rendering
 			return checkCachedTracks().then(() => {
 				renderPlaylist();
-				// Pre-cache resources first, then songs
-				return preloadResources().then(() => {
-					startPreloadingSongs();
+				// Verify all static files are cached, then start caching tracks
+				return verifyStaticCache().then(() => {
+					startPreloadingTracks();
 				});
 			});
 		} else {
-			updateCurrentSongDisplay('No tracks found');
+			updateCurrentTrackDisplay('No tracks found');
 		}
 	})
 	.catch(error => {
 		console.error('Error loading tracks:', error);
-		updateCurrentSongDisplay('Unable to load tracks. Please check your connection.');
+		updateCurrentTrackDisplay('Unable to load tracks. Please check your connection.');
 	});
 
 // Audio event listeners
@@ -98,20 +139,20 @@ audio.addEventListener('play', () => {
 	isPlaying = true;
 	updatePlayPauseButton();
 	startProgressBar();
-	const song = songs[currentSongIndex];
-	const songText = `${song.artist} – ${song.title}`;
+	const track = tracks[currentTrackIndex];
+	const trackText = `${track.artist} – ${track.title}`;
 
 	// Always update display to ensure we remove "Ready to play:" prefix
-	const currentText = currentSongDisplay.querySelector('span')?.textContent || '';
+	const currentText = currentTrackDisplay.querySelector('span')?.textContent || '';
 
-	// Check if it's a different song (not just play/pause of same song)
-	const isNewSong = !currentText.includes(songText);
+	// Check if it's a different track (not just play/pause of same track)
+	const isNewTrack = !currentText.includes(trackText);
 	const hasReadyToPlay = currentText.includes('Ready to play:');
 
-	if (isNewSong || hasReadyToPlay) {
-		updateCurrentSongDisplay(songText);
+	if (isNewTrack || hasReadyToPlay) {
+		updateCurrentTrackDisplay(trackText);
 	} else {
-		// Same song, just resume the marquee
+		// Same track, just resume the marquee
 		resumeMarquee();
 	}
 
@@ -121,8 +162,8 @@ audio.addEventListener('play', () => {
 		// Use document.baseURI to correctly resolve paths in subdirectories
 		const albumArtUrl = new URL('mix/album_art.jpg', document.baseURI).href;
 		navigator.mediaSession.metadata = new MediaMetadata({
-			title: song.title,
-			artist: song.artist,
+			title: track.title,
+			artist: track.artist,
 			artwork: [
 				{ src: albumArtUrl, sizes: '860x860', type: 'image/jpeg' },
 				{ src: albumArtUrl, sizes: '512x512', type: 'image/jpeg' },
@@ -147,13 +188,13 @@ audio.addEventListener('play', () => {
 
 		navigator.mediaSession.setActionHandler('previoustrack', () => {
 			if (playerReady) {
-				prevSong();
+				prevTrack();
 			}
 		});
 
 		navigator.mediaSession.setActionHandler('nexttrack', () => {
 			if (playerReady) {
-				nextSong();
+				nextTrack();
 			}
 		});
 
@@ -171,19 +212,19 @@ audio.addEventListener('pause', () => {
 });
 
 audio.addEventListener('ended', () => {
-	if (songs[currentSongIndex].looping) {
+	if (tracks[currentTrackIndex].looping) {
 		audio.currentTime = 0;
 		audio.play();
 	} else {
-		nextSong();
+		nextTrack();
 	}
 });
 
 audio.addEventListener('error', (e) => {
 	console.error('Audio error:', e);
-	updateCurrentSongDisplay(`Error loading: ${songs[currentSongIndex].filename}`);
-	// Try next song after a brief delay
-	setTimeout(() => nextSong(), 1000);
+	updateCurrentTrackDisplay(`Error loading: ${tracks[currentTrackIndex].filename}`);
+	// Try next track after a brief delay
+	setTimeout(() => nextTrack(), 1000);
 });
 
 audio.addEventListener('loadedmetadata', () => {
@@ -192,10 +233,10 @@ audio.addEventListener('loadedmetadata', () => {
 
 function renderPlaylist() {
 	playlist.innerHTML = '';
-	const currentDisplayText = currentSongDisplay.textContent;
-	const isInitialized = currentDisplayText !== 'No song playing';
+	const currentDisplayText = currentTrackDisplay.textContent;
+	const isInitialized = currentDisplayText !== 'No track playing';
 
-	songs.forEach((song, index) => {
+	tracks.forEach((track, index) => {
 		const item = document.createElement('div');
 		item.classList.add('playlist-item');
 
@@ -204,20 +245,20 @@ function renderPlaylist() {
 
 		const titleDiv = document.createElement('div');
 		titleDiv.classList.add('playlist-item-title');
-		if (isInitialized && index === currentSongIndex) {
+		if (isInitialized && index === currentTrackIndex) {
 			titleDiv.classList.add('current');
 		}
-		titleDiv.textContent = song.title;
+		titleDiv.textContent = track.title;
 
 		const artistDiv = document.createElement('div');
 		artistDiv.classList.add('playlist-item-artist');
-		if (isInitialized && index === currentSongIndex) {
+		if (isInitialized && index === currentTrackIndex) {
 			artistDiv.classList.add('current');
 		}
-		artistDiv.textContent = song.artist;
+		artistDiv.textContent = track.artist;
 
 		// Set cached status for visual indication
-		const isCached = cachedTracks.has(song.filename);
+		const isCached = cachedTracks.has(track.filename);
 		if (!isCached) {
 			contentDiv.classList.add('uncached');
 		}
@@ -228,7 +269,7 @@ function renderPlaylist() {
 		const loopIcon = document.createElement('span');
 		loopIcon.style.width = '1.18em';
 		loopIcon.style.height = '1.18em';
-		loopIcon.style.display = (song.looping || false) ? 'inline-block' : 'none';
+		loopIcon.style.display = (track.looping || false) ? 'inline-block' : 'none';
 		loopIcon.style.color = 'var(--text)';
 		fetch('resources/repeat.svg')
 			.then(r => r.text())
@@ -250,8 +291,8 @@ function renderPlaylist() {
 
 function toggleLooping(index) {
 	if (!playerReady) return;
-	if (index === currentSongIndex) {
-		if (!isPlaying && currentSongDisplay.textContent.includes('Ready to play')) {
+	if (index === currentTrackIndex) {
+		if (!isPlaying && currentTrackDisplay.textContent.includes('Ready to play')) {
 			audio.play().catch(err => {
 				console.error('Failed to play audio:', err);
 			});
@@ -260,43 +301,43 @@ function toggleLooping(index) {
 			return;
 		}
 		// Toggle looping
-		songs[index].looping = !(songs[index].looping || false);
+		tracks[index].looping = !(tracks[index].looping || false);
 		renderPlaylist();
 	} else {
-		playSong(index);
+		playTrack(index);
 	}
 }
 
-function playSong(index) {
-	console.log(`playSong called with index: ${index}`);
+function playTrack(index) {
+	console.log(`playTrack called with index: ${index}`);
 	if (!playerReady) {
 		console.log('Player not ready');
 		return;
 	}
-	// Clear looping from all songs except the new one if it was already looping
-	const wasLooping = songs[index].looping || false;
-	songs.forEach(song => song.looping = false);
+	// Clear looping from all tracks except the new one if it was already looping
+	const wasLooping = tracks[index].looping || false;
+	tracks.forEach(track => track.looping = false);
 	if (wasLooping) {
-		songs[index].looping = true;
+		tracks[index].looping = true;
 	}
 
-	currentSongIndex = index;
-	const song = songs[currentSongIndex];
-	console.log(`Attempting to play: ${song.artist} – ${song.title}`);
-	console.log(`Filename: ${song.filename}`);
-	console.log(`Is in preloadedAudio: ${!!preloadedAudio[song.filename]}`);
+	currentTrackIndex = index;
+	const track = tracks[currentTrackIndex];
+	console.log(`Attempting to play: ${track.artist} – ${track.title}`);
+	console.log(`Filename: ${track.filename}`);
+	console.log(`Is in preloadedAudio: ${!!preloadedAudio[track.filename]}`);
 
 	// Use preloaded blob if available, otherwise load from server
-	if (preloadedAudio[song.filename]) {
-		const blobUrl = preloadedAudio[song.filename].blobUrl;
-		console.log(`Playing from preloaded blob: ${song.filename}`);
+	if (preloadedAudio[track.filename]) {
+		const blobUrl = preloadedAudio[track.filename].blobUrl;
+		console.log(`Playing from preloaded blob: ${track.filename}`);
 		console.log(`Blob URL: ${blobUrl}`);
 		audio.src = blobUrl;
 	} else {
-		console.log(`Song not preloaded, loading: ${song.filename}`);
-		audio.src = `mix/${song.filename}`;
-		// Request priority preloading for this song
-		requestPriorityPreload(song.filename);
+		console.log(`Track not preloaded, loading: ${track.filename}`);
+		audio.src = `mix/${track.filename}`;
+		// Request priority preloading for this track
+		requestPriorityPreload(track.filename);
 	}
 
 	console.log(`Audio src set to: ${audio.src}`);
@@ -328,7 +369,7 @@ function playSong(index) {
 			console.error('Error message:', err.message);
 			isPlaying = false;
 			updatePlayPauseButton();
-			updateCurrentSongDisplay(`Error playing: ${song.title}`);
+			updateCurrentTrackDisplay(`Error playing: ${track.title}`);
 		});
 	}
 
@@ -338,8 +379,8 @@ function playSong(index) {
 	renderPlaylist();
 }
 
-function updateCurrentSongDisplay(text) {
-	currentSongDisplay.innerHTML = `<span>${text}</span>`;
+function updateCurrentTrackDisplay(text) {
+	currentTrackDisplay.innerHTML = `<span>${text}</span>`;
 	// Initialize marquee effect after a brief delay to ensure DOM is updated
 	setTimeout(() => setupMarquee(), 50);
 }
@@ -356,7 +397,7 @@ let marqueeElapsedBeforePause = 0;
 const marqueeSpeed = 50; // pixels per second
 
 function setupMarquee() {
-	const container = currentSongDisplay;
+	const container = currentTrackDisplay;
 	const textSpan = container.querySelector('span');
 
 	if (!textSpan) return;
@@ -429,7 +470,7 @@ function marqueeStep(now) {
 	// Modulo by one segment width for seamless wrapping — no loop boundary
 	const offset = totalDistance % marqueeHalfWidth;
 
-	const textSpan = currentSongDisplay.querySelector('span');
+	const textSpan = currentTrackDisplay.querySelector('span');
 	if (textSpan) {
 		textSpan.style.transform = `translateX(-${offset}px)`;
 	}
@@ -460,7 +501,7 @@ function resumeMarquee() {
 	if (!marqueeAnimating) return;
 	marqueePaused = false;
 
-	const textSpan = currentSongDisplay.querySelector('span');
+	const textSpan = currentTrackDisplay.querySelector('span');
 	if (!textSpan) return;
 
 	// Resume from where we left off
@@ -475,7 +516,7 @@ window.addEventListener('resize', () => {
 		const wasPaused = marqueePaused;
 
 		// Restore original text before recalculating
-		const textSpan = currentSongDisplay.querySelector('span');
+		const textSpan = currentTrackDisplay.querySelector('span');
 		if (textSpan) {
 			textSpan.textContent = marqueeOriginalText;
 		}
@@ -495,14 +536,14 @@ function togglePlayPause() {
 		audio.pause();
 		isPlaying = false;
 	} else {
-		// If no song is loaded, load the first one
+		// If no track is loaded, load the first one
 		if (!audio.src || audio.src === '') {
-			playSong(currentSongIndex);
+			playTrack(currentTrackIndex);
 		} else {
 			audio.play().catch(err => {
 				console.error('Failed to play audio:', err);
-				const song = songs[currentSongIndex];
-				updateCurrentSongDisplay(`Error playing: ${song.title}`);
+				const track = tracks[currentTrackIndex];
+				updateCurrentTrackDisplay(`Error playing: ${track.title}`);
 			});
 			isPlaying = true;
 		}
@@ -514,17 +555,17 @@ function updatePlayPauseButton() {
 	playPauseBtn.classList.toggle('pause', isPlaying);
 }
 
-function nextSong() {
+function nextTrack() {
 	if (!playerReady) return;
-	currentSongIndex = (currentSongIndex + 1) % songs.length;
-	playSong(currentSongIndex);
+	currentTrackIndex = (currentTrackIndex + 1) % tracks.length;
+	playTrack(currentTrackIndex);
 }
 
-function prevSong() {
+function prevTrack() {
 	if (!playerReady) return;
 	if (audio.currentTime <= 3) {
-		currentSongIndex = (currentSongIndex - 1 + songs.length) % songs.length;
-		playSong(currentSongIndex);
+		currentTrackIndex = (currentTrackIndex - 1 + tracks.length) % tracks.length;
+		playTrack(currentTrackIndex);
 	} else {
 		audio.currentTime = 0;
 	}
@@ -544,15 +585,15 @@ function startProgressBar() {
 	// setInterval is less throttled than requestAnimationFrame in background
 	backgroundPlaybackCheckInterval = setInterval(() => {
 		if (!audio.paused && audio.duration && audio.currentTime >= audio.duration - 0.5) {
-			console.log('Background check: song ended, triggering next');
+			console.log('Background check: track ended, triggering next');
 			clearInterval(backgroundPlaybackCheckInterval);
 			backgroundPlaybackCheckInterval = null;
 
-			if (songs[currentSongIndex].looping) {
+			if (tracks[currentTrackIndex].looping) {
 				audio.currentTime = 0;
 				audio.play();
 			} else {
-				nextSong();
+				nextTrack();
 			}
 		}
 
@@ -624,13 +665,13 @@ function applySeek(clickPercentage) {
 
 	// If audio hasn't been loaded yet, load it but don't play
 	if (!audio.src || audio.src === '') {
-		const song = songs[currentSongIndex];
+		const track = tracks[currentTrackIndex];
 
 		// Use preloaded blob if available, otherwise load from server
-		if (preloadedAudio[song.filename]) {
-			audio.src = preloadedAudio[song.filename].blobUrl;
+		if (preloadedAudio[track.filename]) {
+			audio.src = preloadedAudio[track.filename].blobUrl;
 		} else {
-			audio.src = `mix/${song.filename}`;
+			audio.src = `mix/${track.filename}`;
 		}
 
 		// Wait for metadata to be loaded before seeking
@@ -773,8 +814,8 @@ function onProgressMouseUp(event) {
 }
 
 playPauseBtn.addEventListener('click', togglePlayPause);
-nextBtn.addEventListener('click', nextSong);
-prevBtn.addEventListener('click', prevSong);
+nextBtn.addEventListener('click', nextTrack);
+prevBtn.addEventListener('click', prevTrack);
 
 // Mouse events for desktop
 progressContainer.addEventListener('mousedown', onProgressMouseDown);
@@ -797,91 +838,116 @@ document.addEventListener('keydown', function(event) {
 	}
 });
 
-// Pre-caching system
-function preloadResources() {
-	console.log('Preloading UI resources...');
-
-	const resources = [
-		'resources/play.svg',
-		'resources/pause.svg',
-		'resources/prev.svg',
-		'resources/next.svg',
-		'mix/album_art.jpg'
-	];
-
-	const imagePromises = resources.map(src => {
-		return new Promise((resolve, reject) => {
-			const img = new Image();
-			img.onload = () => {
-				console.log(`Preloaded: ${src}`);
-				resolve();
-			};
-			img.onerror = () => {
-				console.error(`Failed to preload: ${src}`);
-				resolve(); // Resolve anyway to not block other resources
-			};
-			img.src = src;
-		});
-	});
-
-	return Promise.all(imagePromises).then(() => {
-		console.log('All UI resources preloaded');
-	});
-}
-
-function startPreloadingSongs() {
-	// Start with the first song
-	currentPreloadIndex = 0;
-	preloadNextSong();
-}
-
-function preloadNextSong() {
-	if (currentPreloadIndex >= songs.length) {
-		const totalMB = (totalBytesLoaded / 1024 / 1024).toFixed(2);
-		console.log(`All songs preloaded - Total size: ${totalMB} MB (${totalBytesLoaded} bytes)`);
+// Verify all static files are in the cache, fetching any that are missing
+async function verifyStaticCache() {
+	if (staticFiles.length === 0) {
+		console.warn('No static files list available');
 		return;
 	}
 
-	const song = songs[currentPreloadIndex];
-	const filename = song.filename;
+	console.log(`Verifying ${staticFiles.length} static files are cached...`);
+
+	try {
+		const cache = await caches.open(CACHE_NAME);
+		const cachedRequests = await cache.keys();
+		const cachedUrls = new Set(cachedRequests.map(r => r.url));
+
+		const missing = [];
+		for (const file of staticFiles) {
+			const absoluteUrl = file === './'
+				? new URL('./', window.location.href).href
+				: new URL(file, window.location.href).href;
+			if (!cachedUrls.has(absoluteUrl)) {
+				missing.push({ file, absoluteUrl });
+			}
+		}
+
+		if (missing.length === 0) {
+			console.log('All static files already cached');
+			return;
+		}
+
+		console.log(`${missing.length} static files missing from cache, fetching...`);
+
+		await Promise.all(missing.map(async ({ file, absoluteUrl }) => {
+			try {
+				const response = await fetchWithRetry(file);
+				await cache.put(absoluteUrl, response);
+				console.log(`✓ Cached missing static file: ${file}`);
+			} catch (error) {
+				console.error(`✗ Failed to cache static file: ${file}`, error);
+			}
+		}));
+
+		console.log('Static cache verification complete');
+	} catch (error) {
+		console.error('Failed to verify static cache:', error);
+	}
+
+	// Preload image/SVG assets into the browser's in-memory cache
+	const imageFiles = staticFiles.filter(f =>
+		f.endsWith('.svg') || f.endsWith('.jpg') || f.endsWith('.png')
+	);
+	await Promise.all(imageFiles.map(src => new Promise(resolve => {
+		const img = new Image();
+		img.onload = () => {
+			console.log(`Preloaded: ${src}`);
+			resolve();
+		};
+		img.onerror = () => {
+			console.error(`Failed to preload: ${src}`);
+			resolve();
+		};
+		img.src = src;
+	})));
+}
+
+function startPreloadingTracks() {
+	// Start with the first track
+	currentPreloadIndex = 0;
+	preloadNextTrack();
+}
+
+function preloadNextTrack() {
+	if (currentPreloadIndex >= tracks.length) {
+		const totalMB = (totalBytesLoaded / 1024 / 1024).toFixed(2);
+		console.log(`All tracks preloaded - Total size: ${totalMB} MB (${totalBytesLoaded} bytes)`);
+		return;
+	}
+
+	const track = tracks[currentPreloadIndex];
+	const filename = track.filename;
 
 	// Skip if already preloaded in memory
 	if (preloadedAudio[filename]) {
 		currentPreloadIndex++;
-		preloadNextSong();
+		preloadNextTrack();
 		return;
 	}
 
 	// If already cached, load from cache into memory
 	if (cachedTracks.has(filename)) {
-		console.log(`Loading from cache: ${song.artist} – ${song.title}`);
+		console.log(`Loading from cache: ${track.artist} – ${track.title}`);
 		loadFromCache(filename).then(() => {
 			currentPreloadIndex++;
-			setTimeout(() => preloadNextSong(), 100);
+			setTimeout(() => preloadNextTrack(), 100);
 		}).catch(err => {
 			console.error(`Failed to load from cache, fetching instead:`, err);
 			// If cache load fails, fetch from network
-			fetchAndPreloadSong(song, filename);
+			fetchAndPreloadTrack(track, filename);
 		});
 		return;
 	}
 
-	console.log(`Preloading: ${song.artist} – ${song.title}`);
-	fetchAndPreloadSong(song, filename);
+	console.log(`Preloading: ${track.artist} – ${track.title}`);
+	fetchAndPreloadTrack(track, filename);
 }
 
-function fetchAndPreloadSong(song, filename) {
-	// Use fetch to force full download of the entire file
-	fetch(`mix/${filename}`)
+function fetchAndPreloadTrack(track, filename) {
+	fetchWithRetry(`mix/${filename}`)
 		.then(response => {
-			if (!response.ok) {
-				throw new Error(`HTTP error! status: ${response.status}`);
-			}
-			// Get total file size for progress tracking
 			const contentLength = response.headers.get('content-length');
-			console.log(`Downloading ${song.title} (${(contentLength / 1024 / 1024).toFixed(2)} MB)...`);
-
-			// Read the entire response as a blob
+			console.log(`Downloading ${track.title} (${(contentLength / 1024 / 1024).toFixed(2)} MB)...`);
 			return response.blob();
 		})
 		.then(blob => {
@@ -896,7 +962,7 @@ function fetchAndPreloadSong(song, filename) {
 				blob: blob
 			};
 
-			console.log(`✓ Fully preloaded: ${song.artist} – ${song.title}`);
+			console.log(`✓ Fully preloaded: ${track.artist} – ${track.title}`);
 
 			// Store in Cache API for offline access
 			return storeBlobInCache(filename, blob).then(() => {
@@ -904,15 +970,15 @@ function fetchAndPreloadSong(song, filename) {
 				cachedTracks.add(filename);
 				updateTrackCachedStatus(filename);
 
-				// Move to next song
+				// Move to next track
 				currentPreloadIndex++;
-				setTimeout(() => preloadNextSong(), 100);
+				setTimeout(() => preloadNextTrack(), 100);
 			});
 		})
 		.catch(error => {
 			console.error(`Failed to preload ${filename}:`, error);
 			currentPreloadIndex++;
-			preloadNextSong();
+			preloadNextTrack();
 		});
 }
 
@@ -922,17 +988,17 @@ async function checkCachedTracks() {
 		const cache = await caches.open(CACHE_NAME);
 		const cachedRequests = await cache.keys();
 
-		// Check each song to see if it's cached
-		for (const song of songs) {
+		// Check each track to see if it's cached
+		for (const track of tracks) {
 			// Build the same absolute URL that storeBlobInCache uses for consistency
-			const absoluteUrl = new URL(`mix/${song.filename}`, window.location.href).href;
+			const absoluteUrl = new URL(`mix/${track.filename}`, window.location.href).href;
 			const isInCache = cachedRequests.some(request => request.url === absoluteUrl);
 			if (isInCache) {
-				cachedTracks.add(song.filename);
+				cachedTracks.add(track.filename);
 			}
 		}
 
-		console.log(`Found ${cachedTracks.size}/${songs.length} tracks already cached`);
+		console.log(`Found ${cachedTracks.size}/${tracks.length} tracks already cached`);
 		console.log('Cached tracks:', Array.from(cachedTracks));
 	} catch (error) {
 		console.error('Failed to check cached tracks:', error);
@@ -944,17 +1010,17 @@ window.debugAudioState = function() {
 	console.log('=== Audio State Debug ===');
 	console.log('Player ready:', playerReady);
 	console.log('Is playing:', isPlaying);
-	console.log('Current song index:', currentSongIndex);
-	console.log('Total songs:', songs.length);
+	console.log('Current track index:', currentTrackIndex);
+	console.log('Total tracks:', tracks.length);
 	console.log('Cached tracks count:', cachedTracks.size);
 	console.log('Preloaded audio count:', Object.keys(preloadedAudio).length);
 	console.log('Current audio src:', audio.src);
 	console.log('Audio paused:', audio.paused);
 	console.log('Audio error:', audio.error);
-	if (songs[currentSongIndex]) {
-		console.log('Current song:', songs[currentSongIndex].filename);
-		console.log('Is preloaded:', !!preloadedAudio[songs[currentSongIndex].filename]);
-		console.log('Is cached:', cachedTracks.has(songs[currentSongIndex].filename));
+	if (tracks[currentTrackIndex]) {
+		console.log('Current track:', tracks[currentTrackIndex].filename);
+		console.log('Is preloaded:', !!preloadedAudio[tracks[currentTrackIndex].filename]);
+		console.log('Is cached:', cachedTracks.has(tracks[currentTrackIndex].filename));
 	}
 	console.log('======================');
 };
@@ -1031,13 +1097,13 @@ async function storeBlobInCache(filename, blob) {
 
 // Update UI to show track is cached
 function updateTrackCachedStatus(filename) {
-	const songIndex = songs.findIndex(s => s.filename === filename);
-	if (songIndex === -1) return;
+	const trackIndex = tracks.findIndex(s => s.filename === filename);
+	if (trackIndex === -1) return;
 
 	// Find the playlist item and remove uncached class
 	const playlistItems = playlist.querySelectorAll('.playlist-item');
-	if (playlistItems[songIndex]) {
-		const contentDiv = playlistItems[songIndex].querySelector('.playlist-item-content');
+	if (playlistItems[trackIndex]) {
+		const contentDiv = playlistItems[trackIndex].querySelector('.playlist-item-content');
 		if (contentDiv) {
 			contentDiv.classList.remove('uncached');
 		}
@@ -1075,36 +1141,32 @@ function processPriorityPreload() {
 		return;
 	}
 
-	// Find the song info
-	const song = songs.find(s => s.filename === filename);
-	if (!song) {
+	// Find the track info
+	const track = tracks.find(s => s.filename === filename);
+	if (!track) {
 		processPriorityPreload();
 		return;
 	}
 
 	// If already cached, load from cache
 	if (cachedTracks.has(filename)) {
-		console.log(`🔥 Priority loading from cache: ${song.artist} – ${song.title}`);
+		console.log(`🔥 Priority loading from cache: ${track.artist} – ${track.title}`);
 		loadFromCache(filename).then(() => {
 			processPriorityPreload();
 		}).catch(err => {
 			console.error(`Failed to load from cache, fetching instead:`, err);
-			priorityFetchAndPreloadSong(song, filename);
+			priorityFetchAndPreloadTrack(track, filename);
 		});
 		return;
 	}
 
-	console.log(`🔥 Priority preloading: ${song.artist} – ${song.title}`);
-	priorityFetchAndPreloadSong(song, filename);
+	console.log(`🔥 Priority preloading: ${track.artist} – ${track.title}`);
+	priorityFetchAndPreloadTrack(track, filename);
 }
 
-function priorityFetchAndPreloadSong(song, filename) {
-	// Use fetch to force full download of the entire file
-	fetch(`mix/${filename}`)
+function priorityFetchAndPreloadTrack(track, filename) {
+	fetchWithRetry(`mix/${filename}`)
 		.then(response => {
-			if (!response.ok) {
-				throw new Error(`HTTP error! status: ${response.status}`);
-			}
 			return response.blob();
 		})
 		.then(blob => {
@@ -1116,8 +1178,8 @@ function priorityFetchAndPreloadSong(song, filename) {
 				blob: blob
 			};
 
-			// Next time this song plays, it will use the cached version
-			console.log(`✓ Priority preloaded: ${song.artist} – ${song.title}`);
+			// Next time this track plays, it will use the cached version
+			console.log(`✓ Priority preloaded: ${track.artist} – ${track.title}`);
 
 			// Store in Cache API for offline access
 			return storeBlobInCache(filename, blob).then(() => {

@@ -9,6 +9,14 @@ if ('serviceWorker' in navigator && location.hostname !== 'localhost' && locatio
 				console.log('Service Worker registration failed:', error);
 			});
 	});
+} else if ('serviceWorker' in navigator && (location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+	// On localhost, unregister any existing service worker and clear caches
+	navigator.serviceWorker.getRegistrations().then(registrations => {
+		registrations.forEach(r => r.unregister());
+	});
+	caches.keys().then(keys => {
+		keys.forEach(k => caches.delete(k));
+	});
 }
 
 const playPauseBtn = document.getElementById('playPause');
@@ -84,6 +92,7 @@ fetch('manifest.json')
 		if (!response.ok) return null;
 		return response.json();
 	})
+	.catch(() => null)
 	.then(manifest => {
 		if (manifest) {
 			CACHE_NAME = manifest.cache_name || manifest.name || CACHE_NAME;
@@ -106,6 +115,12 @@ fetch('manifest.json')
 				.then(r => {
 					if (!r.ok) throw new Error('tracks.json not found');
 					return r.json();
+				})
+				.catch(() => {
+					// Offline fallback: try loading from cache directly
+					return caches.open(CACHE_NAME)
+						.then(cache => cache.match('mix/tracks.json'))
+						.then(r => r ? r.json() : Promise.reject('tracks.json not in cache'));
 				})
 		]);
 	})

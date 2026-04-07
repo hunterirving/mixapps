@@ -103,8 +103,8 @@ def _next_cache_name(app_name, manifest_path):
 	return f"{app_name}-v1"
 
 
-def generate_pwa_manifests(app_name=None, base_path=None):
-	"""Generate PWA manifest files based on tracks.json
+def build_pwa(app_name=None, base_path=None):
+	"""Generate manifest.json and service-worker.js based on tracks.json
 
 	Args:
 		app_name: Name of the app. If None, will be prompted via get_configuration()
@@ -119,7 +119,7 @@ def generate_pwa_manifests(app_name=None, base_path=None):
 	cache_name = _next_cache_name(app_name, SCRIPT_DIR / "manifest.json")
 	app_description = f"{app_name}"
 
-	print("Generating PWA manifests...")
+	print("Building PWA files...")
 	print(f"  Cache name: {cache_name}")
 
 	# Load tracks.json
@@ -309,10 +309,10 @@ self.addEventListener('fetch', (event) => {{
 		f.write(service_worker_content)
 	print("✓ Generated service-worker.js")
 	print()
-	print("PWA manifests generated successfully!")
+	print("PWA build complete!")
 
 
 if __name__ == "__main__":
-	# When run directly, get configuration and generate manifests
+	# When run directly, get configuration and build PWA files
 	app_name, base_path = get_configuration()
-	generate_pwa_manifests(app_name, base_path)
+	build_pwa(app_name, base_path)

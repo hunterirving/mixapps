@@ -364,7 +364,7 @@ def rip_cd():
 		print(f"\nTracks saved to: {MIX_DIR}")
 		print("\nNext steps:")
 		print("  1. Run scan.py to generate tracks.json with metadata")
-		print("  2. Run host.py to test your mixtape locally")
+		print("  2. Run serve.py to test your mixtape locally")
 
 		# Eject the CD
 		print("\nEjecting CD...")

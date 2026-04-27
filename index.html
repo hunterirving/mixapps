@@ -40,6 +40,14 @@
 	<audio id="audioPlayer"></audio>
 
 	<script src="resources/script.js"></script>
+	<script>
+		// Load reorder UI only on local networks.
+		if (typeof isLocal !== 'undefined' && isLocal) {
+			const s = document.createElement('script');
+			s.src = 'resources/reorder.js';
+			document.body.appendChild(s);
+		}
+	</script>
 	<script src="mix/custom.js" onerror="this.remove()"></script>
 </body>
 </html>

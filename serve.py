@@ -9,6 +9,7 @@ import socketserver
 import socket
 import sys
 import os
+import json
 import subprocess
 from pathlib import Path
 
@@ -150,6 +151,7 @@ def start_server():
 
 	# Create server
 	Handler = http.server.SimpleHTTPRequestHandler
+	tracks_path = SCRIPT_DIR / "mix" / "tracks.json"
 
 	# Suppress default logging and broken pipe errors
 	class QuietHandler(Handler):
@@ -167,6 +169,21 @@ def start_server():
 			except (BrokenPipeError, ConnectionResetError):
 				# Browser cancelled the request (normal for media streaming/preloading)
 				pass
+
+		def do_POST(self):
+			# Local-only: receive a reordered tracks array and overwrite tracks.json
+			if self.path != '/tracks':
+				self.send_response(404)
+				self.end_headers()
+				return
+			length = int(self.headers.get('Content-Length', '0'))
+			payload = json.loads(self.rfile.read(length))
+			tracks_path.write_text(
+				json.dumps(payload, indent='\t', ensure_ascii=False) + '\n',
+				encoding='utf-8',
+			)
+			self.send_response(204)
+			self.end_headers()
 
 	try:
 		with socketserver.TCPServer(("", port), QuietHandler) as httpd:

@@ -1,5 +1,15 @@
-// Register service worker for PWA functionality (skip on localhost to avoid caching during development)
-if ('serviceWorker' in navigator && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+const hostname = location.hostname;
+const isLocal =
+	hostname === 'localhost' ||
+	hostname === '127.0.0.1' ||
+	hostname === '::1' ||
+	/^10\./.test(hostname) ||
+	/^192\.168\./.test(hostname) ||
+	/^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
+	/^169\.254\./.test(hostname);
+
+// Register service worker for PWA functionality (skip locally to avoid caching during development)
+if ('serviceWorker' in navigator && !isLocal) {
 	window.addEventListener('load', () => {
 		navigator.serviceWorker.register('service-worker.js')
 			.then(registration => {
@@ -9,8 +19,8 @@ if ('serviceWorker' in navigator && location.hostname !== 'localhost' && locatio
 				console.log('Service Worker registration failed:', error);
 			});
 	});
-} else if ('serviceWorker' in navigator && (location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
-	// On localhost, unregister any existing service worker and clear caches
+} else if ('serviceWorker' in navigator && isLocal) {
+	// Locally, unregister any existing service worker and clear caches
 	navigator.serviceWorker.getRegistrations().then(registrations => {
 		registrations.forEach(r => r.unregister());
 	});
@@ -23,6 +33,8 @@ const playPauseBtn = document.getElementById('playPause');
 const prevBtn = document.getElementById('prev');
 const nextBtn = document.getElementById('next');
 const playlist = document.getElementById('playlist');
+const playlistWrapper = document.querySelector('.playlist-wrapper');
+const controls = document.querySelector('.controls');
 const currentTrackDisplay = document.getElementById('currentTrack');
 const progressBar = document.getElementById('progressBar');
 const progressContainer = document.getElementById('progressContainer');
@@ -42,6 +54,7 @@ function shuffleArray(array) {
 
 let currentTrackIndex = 0;
 let isPlaying = false;
+let canReorder = false;
 let progressInterval;
 let playerReady = false;
 let tracks = [];
@@ -84,6 +97,12 @@ async function fetchWithRetry(url, maxRetries = 4, baseDelay = 2000) {
 			await new Promise(resolve => setTimeout(resolve, delay));
 		}
 	}
+}
+
+// Enable reordering UI only when served locally
+if (isLocal) {
+	canReorder = true;
+	document.body.classList.add('reorderable');
 }
 
 // Load cache name from manifest.json first, then load tracks
@@ -298,9 +317,23 @@ function renderPlaylist() {
 
 		item.appendChild(contentDiv);
 		item.appendChild(loopIcon);
-		item.addEventListener('click', () => toggleLooping(index));
+		item.addEventListener('click', (e) => {
+			if (item._suppressClick) {
+				item._suppressClick = false;
+				e.stopPropagation();
+				return;
+			}
+			toggleLooping(index);
+		});
+		if (canReorder) {
+			attachReorderHandlers(item, index);
+		}
 		playlist.appendChild(item);
 	});
+}
+
+function setCurrentTrackIndex(i) {
+	currentTrackIndex = i;
 }
 
 function toggleLooping(index) {

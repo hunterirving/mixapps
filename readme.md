@@ -42,12 +42,12 @@ hits different, right?<br><br>
 		- `./buy.py` to search for tracks to purchase (opens in iTunes on MacOS, <a href="https://song.link/i/1651294855">song.link</a> otherwise)
 
 2. **scan it**
-	- run `./scan.py` to generate `tracks.json`, which defines the tracks available to the player.
-		- after running `./scan.py` once, you can manually edit `tracks.json` to refine your mix.
+	- run `./scan.py` to create (or update) `tracks.json`, which defines the tracks available to the player.
 
 3. **serve it**
-	- run `./serve.py` to start a local HTTP server for testing. you can scan the QR code printed to the terminal to test the app from any device on your local network.
-
+	- run `./serve.py` to start a local HTTP server for testing. you can scan the QR code printed to your terminal to test the app from any device on your local network.
+	- while the server is running, you can drag tracks up or down in the list to refine your mix (this automatically updates `tracks.json`).
+	
 4. **build it**
 	- run `./build.py` and follow the interactive prompts to generate `manifest.json` and `service-worker.js`, which enable PWA installation and offline functionality.
 

@@ -130,6 +130,7 @@ body {
 	padding-bottom: 70px;
 	overscroll-behavior: none;
 	margin-top: -1px;
+	overflow-anchor: none;
 }
 
 .playlist {
@@ -196,6 +197,36 @@ body {
 	.playlist-item:hover .playlist-item-artist.current {
 		color: var(--accent);
 	}
+
+	body.reorderable .playlist,
+	body.reorderable .playlist-item:hover {
+		cursor: grab;
+	}
+}
+
+body.reorder-pressed,
+body.reorder-pressed * {
+	cursor: grabbing !important;
+}
+
+body.reordering .playlist-item {
+	pointer-events: none;
+	will-change: transform;
+}
+
+.playlist-item.dragging {
+	background-color: var(--background);
+	box-sizing: border-box;
+}
+
+.playlist-item.dragging,
+.playlist-item.dragging .playlist-item-title,
+.playlist-item.dragging .playlist-item-artist {
+	color: var(--accent);
+}
+
+.playlist-item-placeholder {
+	box-sizing: border-box;
 }
 
 .current-track {

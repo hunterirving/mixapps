@@ -79,7 +79,7 @@ def scan_tracks():
 	"""Main function to scan audio files and generate tracks.json"""
 	# Import mutagen here (only after venv is active)
 	try:
-		from mutagen import File as MutagenFile
+		from mutagen import File as MutagenFile  # type: ignore
 		has_mutagen = True
 	except ImportError:
 		MutagenFile = None
@@ -109,58 +109,66 @@ def scan_tracks():
 
 	print(f"Found {len(audio_files)} audio file(s). Extracting metadata...\n")
 
-	tracks = []
-
-	for audio_file in sorted(audio_files):
+	existing_tracks = []
+	if OUTPUT_FILE.exists():
 		try:
-			title = None
-			artist = None
+			with open(OUTPUT_FILE, 'r', encoding='utf-8') as f:
+				loaded = json.load(f)
+			if isinstance(loaded, list):
+				existing_tracks = loaded
+		except (json.JSONDecodeError, OSError) as e:
+			print(f"Warning: could not read existing {OUTPUT_FILE.name} ({e}). Starting fresh.\n")
 
-			if has_mutagen:
-				audio = MutagenFile(audio_file, easy=True)
-				if audio and audio.tags:
-					title = audio.tags.get('title', [None])[0]
-					artist = audio.tags.get('artist', [None])[0]
+	existing_by_filename = {
+		t['filename']: t for t in existing_tracks
+		if isinstance(t, dict) and 'filename' in t
+	}
+	on_disk_filenames = {f.name for f in audio_files}
+	files_by_name = {f.name: f for f in audio_files}
 
-			# Fallback to filename for title if not found
-			if not title:
-				title = audio_file.stem  # filename without extension
+	def read_metadata(audio_file):
+		title = None
+		artist = None
+		if has_mutagen:
+			audio = MutagenFile(audio_file, easy=True)
+			if audio and audio.tags:
+				title = audio.tags.get('title', [None])[0]
+				artist = audio.tags.get('artist', [None])[0]
+		if not title:
+			title = audio_file.stem
+		if not artist:
+			artist = "Unknown Artist"
+		return {"title": title, "artist": artist, "filename": audio_file.name}
 
-			# Fallback to "Unknown Artist" if not found
-			if not artist:
-				artist = "Unknown Artist"
+	tracks = []
+	removed = []
+	for entry in existing_tracks:
+		if not isinstance(entry, dict) or 'filename' not in entry:
+			continue
+		if entry['filename'] in on_disk_filenames:
+			tracks.append(entry)
+		else:
+			removed.append(entry['filename'])
 
-			track_info = {
-				"title": title,
-				"artist": artist,
-				"filename": audio_file.name
-			}
-
-			tracks.append(track_info)
-			print(f"✓ {track_info['artist']} - {track_info['title']}")
-
+	new_files = sorted(
+		(files_by_name[name] for name in on_disk_filenames if name not in existing_by_filename),
+		key=lambda f: f.name,
+	)
+	new_tracks = []
+	for audio_file in new_files:
+		try:
+			new_tracks.append(read_metadata(audio_file))
 		except Exception as e:
 			print(f"✗ Error reading {audio_file.name}: {e}")
-			continue
 
-	# Check if ALL titles start with numbers
-	# If so, strip the leading numbers from all titles
-	import re
-	all_have_leading_numbers = all(
-		re.match(r'^\d+\s*[-.]?\s*', track['title'])
-		for track in tracks
-	)
+	for track in new_tracks:
+		print(f"+ {track['artist']} - {track['title']}")
+	for filename in removed:
+		print(f"- {filename} (removed; no longer on disk)")
+	if not new_tracks and not removed:
+		print("No changes — tracks.json already matches /mix.")
 
-	if all_have_leading_numbers and tracks:
-		print("\nDetected track numbers in all titles. Stripping them...")
-		for track in tracks:
-			original_title = track['title']
-			# Remove leading number pattern
-			cleaned_title = re.sub(r'^\d+\s*[-.]?\s*', '', original_title)
-			if cleaned_title:  # Only update if something remains
-				track['title'] = cleaned_title
-				if cleaned_title != original_title:
-					print(f"  {original_title} → {cleaned_title}")
+	tracks.extend(new_tracks)
 
 	if not tracks:
 		print("\nNo valid audio files could be processed.")

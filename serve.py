@@ -120,13 +120,20 @@ def print_qr_code(url):
 		# Get the QR code matrix
 		matrix = qr.get_matrix()
 
-		# Print QR code using block characters
-		# Use full block (█) for black and space for white
 		print("\nScan to connect:")
-		for row in matrix:
+		for y in range(0, len(matrix), 2):
 			line = ""
-			for cell in row:
-				line += "██" if cell else "  "
+			for x in range(len(matrix[y])):
+				top = matrix[y][x]
+				bottom = matrix[y + 1][x] if y + 1 < len(matrix) else False
+				if top and bottom:
+					line += "█"
+				elif top:
+					line += "▀"
+				elif bottom:
+					line += "▄"
+				else:
+					line += " "
 			print(line)
 		print()
 	except ImportError:

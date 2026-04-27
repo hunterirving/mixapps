@@ -339,6 +339,11 @@ function setCurrentTrackIndex(i) {
 function toggleLooping(index) {
 	if (!playerReady) return;
 	if (index === currentTrackIndex) {
+		// First-tap on the auto-selected track: nothing is loaded yet, so start it like any other track.
+		if (!audio.src) {
+			playTrack(index);
+			return;
+		}
 		if (!isPlaying && currentTrackDisplay.textContent.includes('Ready to play')) {
 			audio.play().catch(err => {
 				console.error('Failed to play audio:', err);

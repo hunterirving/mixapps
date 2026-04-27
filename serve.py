@@ -186,7 +186,8 @@ def start_server():
 			self.end_headers()
 
 	try:
-		with socketserver.TCPServer(("", port), QuietHandler) as httpd:
+		with socketserver.ThreadingTCPServer(("", port), QuietHandler) as httpd:
+			httpd.daemon_threads = True
 			local_url = f"http://localhost:{port}"
 			network_url = f"http://{local_ip}:{port}"
 

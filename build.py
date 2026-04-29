@@ -175,10 +175,16 @@ def build_pwa(app_name=None, base_path=None):
 		"resources/repeat.svg",
 	]
 
-	# Conditionally include optional files if they exist
-	for optional_file in ["album_art.jpg", "custom.css", "custom.js"]:
-		if (SCRIPT_DIR / "mix" / optional_file).exists():
-			static_files.append(f"mix/{optional_file}")
+	AUDIO_EXTS = {".mp3", ".m4a", ".ogg", ".flac", ".wav"}
+	SKIP_NAMES = {"tracks.json", "readme.md"}
+	for path in sorted((SCRIPT_DIR / "mix").iterdir()):
+		if not path.is_file():
+			continue
+		if path.name in SKIP_NAMES:
+			continue
+		if path.suffix.lower() in AUDIO_EXTS:
+			continue
+		static_files.append(f"mix/{path.name}")
 
 	static_files_js = json.dumps(static_files)
 

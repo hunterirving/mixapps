@@ -433,8 +433,7 @@ function playTrack(index) {
 
 function updateCurrentTrackDisplay(text) {
 	currentTrackDisplay.innerHTML = `<span>${text}</span>`;
-	// Initialize marquee effect after a brief delay to ensure DOM is updated
-	setTimeout(() => setupMarquee(), 50);
+	setupMarquee();
 }
 
 // Marquee state
@@ -444,17 +443,18 @@ let marqueeTimeoutId = null;
 let marqueeOriginalText = '';
 let marqueeHalfWidth = 0;
 let marqueeRafId = null;
-let marqueeStartTime = 0;
-let marqueeElapsedBeforePause = 0;
+let marqueeOffset = 0; // current displayed translateX, in px (persists across pause/resize)
+let marqueeRampStart = 0; // performance.now() when the current ease-in ramp began
+let marqueeLastFrame = 0; // performance.now() of the previous animation frame
 const marqueeSpeed = 50; // pixels per second
+const marqueeRampDuration = 2000; // ms to ease from 0 up to full speed
 
-function setupMarquee() {
+function setupMarquee({ preserveOffset = false } = {}) {
 	const container = currentTrackDisplay;
 	const textSpan = container.querySelector('span');
 
 	if (!textSpan) return;
 
-	// Clear any existing animation
 	if (marqueeTimeoutId) {
 		clearTimeout(marqueeTimeoutId);
 		marqueeTimeoutId = null;
@@ -464,85 +464,72 @@ function setupMarquee() {
 		marqueeRafId = null;
 	}
 	marqueeAnimating = false;
-	marqueePaused = false;
-	marqueeElapsedBeforePause = 0;
+	if (!preserveOffset) {
+		marqueeOffset = 0;
+		marqueePaused = false;
+	}
 
-	// Reset styles
-	textSpan.style.transform = 'translateX(0)';
-	textSpan.style.animation = 'none';
 	container.classList.remove('no-overflow');
-
-	// Store original text
 	marqueeOriginalText = textSpan.textContent;
 
-	// Force reflow
-	void textSpan.offsetWidth;
-
-	// Check if text overflows
 	const containerWidth = container.offsetWidth - 30; // Account for padding
-	const textWidth = textSpan.scrollWidth;
-	const overflows = textWidth > containerWidth;
+	const overflows = textSpan.scrollWidth > containerWidth;
 
 	if (!overflows) {
-		// No overflow - show ellipsis behavior
+		textSpan.style.transform = 'translateX(0)';
 		container.classList.add('no-overflow');
-		container.classList.remove('marquee-active');
+		marqueeOffset = 0;
 		return;
 	}
 
-	// Text overflows - setup marquee
 	marqueeAnimating = true;
-	container.classList.add('marquee-active');
 
-	// Add spacing and duplicate text for seamless loop
-	// Using non-breaking spaces (\u00A0) so they don't collapse in HTML
-	const spacing = '\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0'; // 12 non-breaking spaces
+	// Duplicate text for a seamless loop. Non-breaking spaces so HTML doesn't collapse them.
+	const spacing = '\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0';
 	textSpan.textContent = marqueeOriginalText + spacing + marqueeOriginalText + spacing;
+	marqueeHalfWidth = textSpan.scrollWidth / 2;
 
-	// Calculate animation parameters
-	const fullWidth = textSpan.scrollWidth;
-	marqueeHalfWidth = fullWidth / 2;
+	marqueeOffset = marqueeOffset % marqueeHalfWidth;
+	textSpan.style.transform = `translateX(-${marqueeOffset}px)`;
 
-	// Start animation after a brief delay (only if not paused)
-	if (!marqueePaused) {
-		marqueeTimeoutId = setTimeout(() => {
-			if (marqueePaused) return;
-			marqueeStartTime = performance.now();
-			marqueeElapsedBeforePause = 0;
-			marqueeRafId = requestAnimationFrame(marqueeStep);
-		}, 1000); // Initial delay before starting scroll
-	}
+	if (marqueePaused) return;
+	marqueeTimeoutId = setTimeout(startMarqueeMotion, 1000);
+}
+
+function startMarqueeMotion() {
+	marqueeRampStart = performance.now();
+	marqueeLastFrame = marqueeRampStart;
+	marqueeRafId = requestAnimationFrame(marqueeStep);
 }
 
 function marqueeStep(now) {
 	if (!marqueeAnimating || marqueePaused) return;
 
-	const elapsed = marqueeElapsedBeforePause + (now - marqueeStartTime);
-	const totalDistance = elapsed * marqueeSpeed / 1000;
-	// Modulo by one segment width for seamless wrapping — no loop boundary
-	const offset = totalDistance % marqueeHalfWidth;
+	const dt = (now - marqueeLastFrame) / 1000;
+	marqueeLastFrame = now;
+
+	const rampElapsed = now - marqueeRampStart;
+	const t = Math.min(rampElapsed / marqueeRampDuration, 1);
+	const speed = marqueeSpeed * (t * t * (3 - 2 * t));
+
+	marqueeOffset = (marqueeOffset + speed * dt) % marqueeHalfWidth;
 
 	const textSpan = currentTrackDisplay.querySelector('span');
 	if (textSpan) {
-		textSpan.style.transform = `translateX(-${offset}px)`;
+		textSpan.style.transform = `translateX(-${marqueeOffset}px)`;
 	}
 
 	marqueeRafId = requestAnimationFrame(marqueeStep);
 }
 
 function pauseMarquee() {
-	marqueePaused = true;
 	if (!marqueeAnimating) return;
-
-	// Accumulate elapsed time before this pause
-	marqueeElapsedBeforePause += performance.now() - marqueeStartTime;
+	marqueePaused = true;
 
 	if (marqueeRafId) {
 		cancelAnimationFrame(marqueeRafId);
 		marqueeRafId = null;
 	}
-
-	// Clear any pending timeout (for initial delay)
 	if (marqueeTimeoutId) {
 		clearTimeout(marqueeTimeoutId);
 		marqueeTimeoutId = null;
@@ -552,34 +539,25 @@ function pauseMarquee() {
 function resumeMarquee() {
 	if (!marqueeAnimating) return;
 	marqueePaused = false;
+	startMarqueeMotion();
+}
 
+window.addEventListener('resize', () => {
+	if (!marqueeOriginalText) return;
 	const textSpan = currentTrackDisplay.querySelector('span');
 	if (!textSpan) return;
 
-	// Resume from where we left off
-	marqueeStartTime = performance.now();
-	marqueeRafId = requestAnimationFrame(marqueeStep);
-}
+	const prevText = textSpan.textContent;
+	textSpan.textContent = marqueeOriginalText;
+	const containerWidth = currentTrackDisplay.offsetWidth - 30;
+	const overflowsNow = textSpan.scrollWidth > containerWidth;
 
-// Add window resize listener to recalculate marquee
-window.addEventListener('resize', () => {
-	if (marqueeOriginalText) {
-		// Store the paused state before recalculating
-		const wasPaused = marqueePaused;
-
-		// Restore original text before recalculating
-		const textSpan = currentTrackDisplay.querySelector('span');
-		if (textSpan) {
-			textSpan.textContent = marqueeOriginalText;
-		}
-
-		setupMarquee();
-
-		// Restore paused state after recalculation
-		if (wasPaused) {
-			marqueePaused = true;
-		}
+	if (overflowsNow === marqueeAnimating) {
+		textSpan.textContent = prevText;
+		return;
 	}
+
+	setupMarquee({ preserveOffset: true });
 });
 
 function togglePlayPause() {

@@ -85,6 +85,7 @@ function startReorder(item, index, startX, startY, isTouch = false) {
 function beginDrag() {
 	const r = activeReorder;
 	const rect = r.item.getBoundingClientRect();
+	const playlistRect = playlist.getBoundingClientRect();
 	r.itemHeight = rect.height;
 	r.offsetY = r.startY - rect.top;
 
@@ -100,7 +101,6 @@ function beginDrag() {
 	r.item.parentNode.insertBefore(placeholder, r.item);
 	r.placeholder = placeholder;
 
-	const playlistRect = playlist.getBoundingClientRect();
 	r.item.classList.add('dragging');
 	r.item.style.position = 'fixed';
 	r.item.style.left = `${playlistRect.left}px`;

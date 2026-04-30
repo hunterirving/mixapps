@@ -7,7 +7,7 @@ resurrect the lost art of <a href="https://ihavethatonvinyl.com/liner-notes/the-
 </p>
 
 ## demo
-<a href="https://hunterirving.com/vibe_capsule">public domain beats to code to ↗</a>
+<a href="https://hunterirving.com/worn_grooves/">public domain beats to code to ↗</a>
 
 ## key features
 - mixtapes as <a href="https://hunterirving.github.io/web_workshop/pages/pwa/">Progressive Web Apps</a> that work completely offline on Windows, MacOS, Linux, iOS, and Android

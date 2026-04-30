@@ -8,8 +8,15 @@ const isLocal =
 	/^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
 	/^169\.254\./.test(hostname);
 
-// Register service worker for PWA functionality (skip locally to avoid caching during development)
-if ('serviceWorker' in navigator && !isLocal) {
+// In browser tab, don't hit cache.
+// When installed as a PWA, always hit cache.
+const isInstalled =
+	window.matchMedia('(display-mode: standalone)').matches ||
+	window.matchMedia('(display-mode: fullscreen)').matches ||
+	window.matchMedia('(display-mode: minimal-ui)').matches ||
+	window.navigator.standalone === true;
+
+if ('serviceWorker' in navigator && isInstalled && !isLocal) {
 	window.addEventListener('load', () => {
 		navigator.serviceWorker.register('service-worker.js')
 			.then(registration => {
@@ -19,8 +26,9 @@ if ('serviceWorker' in navigator && !isLocal) {
 				console.log('Service Worker registration failed:', error);
 			});
 	});
-} else if ('serviceWorker' in navigator && isLocal) {
-	// Locally, unregister any existing service worker and clear caches
+} else if ('serviceWorker' in navigator) {
+	// Browser tab or local dev: tear down any existing SW and caches so
+	// the page always reflects the latest deploy.
 	navigator.serviceWorker.getRegistrations().then(registrations => {
 		registrations.forEach(r => r.unregister());
 	});

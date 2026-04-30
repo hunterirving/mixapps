@@ -209,10 +209,9 @@ self.addEventListener('install', (event) => {{
 	console.log('Service Worker installing...', 'Base path:', basePath);
 	event.waitUntil(
 		caches.open(CACHE_NAME).then(cache => {{
-			// Make URLs absolute relative to service worker location
 			const absoluteUrls = STATIC_FILES.map(url => {{
-				if (url === './') return basePath;
-				return new URL(url, basePath + 'index.html').href;
+				if (url === './') return new URL(basePath, self.location.href).href;
+				return new URL(url, new URL(basePath, self.location.href)).href;
 			}});
 			console.log('Caching', absoluteUrls.length, 'static resources');
 

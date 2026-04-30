@@ -146,6 +146,7 @@ def build_pwa(app_name=None, base_path=None):
 		"resources/prev.svg",
 		"resources/next.svg",
 		"resources/repeat.svg",
+		"resources/fonts/Basteleur/Basteleur-Moonlight.woff2",
 	]
 
 	AUDIO_EXTS = {".mp3", ".m4a", ".ogg", ".flac", ".wav"}

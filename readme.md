@@ -73,5 +73,7 @@ ensure you have the right to distribute any media files you include in public mi
 
 it may have looked like i winked just now, but that was a blink. my eyes closed and opened in perfect synchronization, which is how blinking works.
 
-## license
-<a href="LICENSE">GNU GPLv3</a>
+## licenses
+this project is licensed under the <a href="LICENSE">GNU General Public License v3.0</a>.
+
+the <a href="https://velvetyne.fr/fonts/basteleur/">Basteleur</a> font by <a href="https://keussel.studio/">Keussel</a> (distributed by <a href="https://velvetyne.fr/">Velvetyne</a>) is licensed under the <a href="resources/fonts/Basteleur/LICENSE.txt">SIL Open Font License, version 1.1</a>.

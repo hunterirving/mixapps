@@ -87,6 +87,7 @@ const staticFiles = [
 	'resources/prev.svg',
 	'resources/next.svg',
 	'resources/repeat.svg',
+	'resources/fonts/Basteleur/Basteleur-Moonlight.woff2',
 ];
 
 // Retry fetch with exponential backoff

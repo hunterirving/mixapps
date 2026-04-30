@@ -76,33 +76,6 @@ def get_background_color():
 	return "#080a0c"
 
 
-def _next_cache_name(app_name, manifest_path):
-	"""Determine the next cache name by incrementing the version in an existing manifest.
-
-	If manifest.json doesn't exist or has no versioned cache_name, returns "{app_name}-v1".
-	If it already has e.g. "heaven-v1", returns "heaven-v1.1".
-	If it already has e.g. "heaven-v1.3", returns "heaven-v1.4".
-	"""
-	if manifest_path.exists():
-		try:
-			with open(manifest_path, 'r', encoding='utf-8') as f:
-				existing = json.load(f)
-			old_cache = existing.get("cache_name", "")
-			# Match pattern like "appname-v1" or "appname-v1.3"
-			match = re.match(r'^(.+)-v(\d+)(?:\.(\d+))?$', old_cache)
-			if match:
-				prefix = match.group(1)
-				major = int(match.group(2))
-				minor = int(match.group(3)) if match.group(3) is not None else 0
-				# If app was renamed, start fresh with new name
-				if prefix != app_name:
-					return f"{app_name}-v1"
-				return f"{app_name}-v{major}.{minor + 1}"
-		except (json.JSONDecodeError, KeyError):
-			pass
-	return f"{app_name}-v1"
-
-
 def build_pwa(app_name=None, base_path=None):
 	"""Generate manifest.json and service-worker.js based on tracks.json
 
@@ -116,7 +89,7 @@ def build_pwa(app_name=None, base_path=None):
 
 	# Derived values
 	short_name = app_name
-	cache_name = _next_cache_name(app_name, SCRIPT_DIR / "manifest.json")
+	cache_name = app_name
 	app_description = f"{app_name}"
 
 	print("Building PWA files...")
@@ -203,8 +176,10 @@ const basePath = getBasePath();
 // Static files to cache on install
 const STATIC_FILES = {static_files_js};
 
-// Install event - cache static resources
-// Audio files will be cached by the main app's blob preloading system
+// Install event - cache static resources only if not already cached.
+// This makes installs immutable: once a file is in the cache, redeploys
+// will not overwrite it, so the app stays frozen at its first-installed version.
+// Audio files will be cached by the main app's blob preloading system.
 self.addEventListener('install', (event) => {{
 	console.log('Service Worker installing...', 'Base path:', basePath);
 	event.waitUntil(
@@ -213,56 +188,35 @@ self.addEventListener('install', (event) => {{
 				if (url === './') return new URL(basePath, self.location.href).href;
 				return new URL(url, new URL(basePath, self.location.href)).href;
 			}});
-			console.log('Caching', absoluteUrls.length, 'static resources');
 
-			// Cache files individually with better error handling
-			// Using Promise.allSettled to continue even if some fail
 			return Promise.allSettled(
 				absoluteUrls.map(url =>
-					fetch(url, {{ cache: 'no-cache' }})
-						.then(response => {{
-							if (!response.ok) {{
-								throw new Error(`HTTP error! status: ${{response.status}}`);
-							}}
-							return cache.put(url, response);
-						}})
-						.then(() => console.log('✓ Cached:', url))
-						.catch(err => {{
-							console.error('✗ Failed to cache:', url, err);
-							throw err;
-						}})
+					cache.match(url).then(existing => {{
+						if (existing) {{
+							console.log('• Already cached, skipping:', url);
+							return;
+						}}
+						return fetch(url, {{ cache: 'no-cache' }})
+							.then(response => {{
+								if (!response.ok) {{
+									throw new Error(`HTTP error! status: ${{response.status}}`);
+								}}
+								return cache.put(url, response);
+							}})
+							.then(() => console.log('✓ Cached:', url))
+							.catch(err => {{
+								console.error('✗ Failed to cache:', url, err);
+								throw err;
+							}});
+					}})
 				)
 			).then(results => {{
 				const failed = results.filter(r => r.status === 'rejected');
-				const succeeded = results.filter(r => r.status === 'fulfilled');
-				console.log(`Cached ${{succeeded.length}}/${{results.length}} static resources`);
-				if (failed.length > 0) {{
-					console.warn(`Failed to cache ${{failed.length}} resources`);
-				}}
+				console.log(`Install complete: ${{results.length - failed.length}}/${{results.length}} ok`);
 			}});
-		}}).then(() => {{
-			console.log('Service Worker installation complete');
-			return self.skipWaiting();
 		}}).catch(error => {{
 			console.error('Service Worker installation failed:', error);
 		}})
-	);
-}});
-
-// Activate event - clean up old caches
-self.addEventListener('activate', (event) => {{
-	console.log('Service Worker activating...');
-	event.waitUntil(
-		caches.keys().then((cacheNames) => {{
-			return Promise.all(
-				cacheNames.map((cacheName) => {{
-					if (cacheName !== CACHE_NAME) {{
-						console.log('Deleting old cache:', cacheName);
-						return caches.delete(cacheName);
-					}}
-				}})
-			);
-		}}).then(() => self.clients.claim())
 	);
 }});
 

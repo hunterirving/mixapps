@@ -1,13 +1,13 @@
 # 💿 mixapps
 
-resurrect the lost art of <a href="https://ihavethatonvinyl.com/liner-notes/the-lost-art-of-the-mixtape/">mixtape</a><a href="https://melos.audio/blogs/information/the-lost-art-of-the-mixtape">-making</a> by packaging playlists as shareable apps that work offline.
+mixapps are like mixtapes or mix CDs, but packaged as <a href="https://hunterirving.github.io/web_workshop/pages/PWA">Progressive Web Apps</a> that you can share with friends and install for offline use.
 
 <p align="center">
 	<img src="readme_images/collection.jpeg" width="550">
 </p>
 
 ## demo
-<a href="https://hunterirving.com/worn_grooves/">public domain beats to code to ↗</a>
+<a href="https://hunterirving.com/worn_grooves/">worn grooves ↗</a>
 
 ## key features
 - mixtapes as <a href="https://hunterirving.github.io/web_workshop/pages/pwa/">Progressive Web Apps</a> that work completely offline on Windows, MacOS, Linux, iOS, and Android

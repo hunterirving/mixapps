@@ -10,7 +10,7 @@ mixapps are like mixtapes or mix CDs, but packaged as <a href="https://hunterirv
 <a href="https://hunterirving.com/worn_grooves/">worn grooves ↗</a>
 
 ## key features
-- mixtapes as <a href="https://hunterirving.github.io/web_workshop/pages/pwa/">Progressive Web Apps</a> that work completely offline on Windows, MacOS, Linux, iOS, and Android
+- shareable mixes that work offline on iOS, Android, Windows, MacOS, and Linux
 - support for `mp3`, `m4a`, `ogg`, `flac`, and `wav` audio formats
 - highly customizable interface (just add CSS!)
 

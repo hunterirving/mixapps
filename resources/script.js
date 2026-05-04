@@ -75,6 +75,7 @@ let isPreloadingPriority = false;
 let totalBytesLoaded = 0; // Track total filesize of all preloaded tracks
 let cachedTracks = new Set(); // Track which tracks are cached for offline use
 let CACHE_NAME = 'my-mixapp'; // Default fallback
+let hasCustomAlbumArt = false;
 const staticFiles = [
 	'./',
 	'index.html',
@@ -82,6 +83,7 @@ const staticFiles = [
 	'resources/script.js',
 	'mix/tracks.json',
 	'resources/icon.png',
+	'resources/album_art.jpg',
 	'resources/play.svg',
 	'resources/pause.svg',
 	'resources/prev.svg',
@@ -136,7 +138,12 @@ fetch('manifest.json')
 		return Promise.all([
 			...optionalFiles.map(f =>
 				fetch(f, { method: 'HEAD' })
-					.then(r => { if (r.ok) staticFiles.push(f); })
+					.then(r => {
+						if (r.ok) {
+							staticFiles.push(f);
+							if (f === 'mix/album_art.jpg') hasCustomAlbumArt = true;
+						}
+					})
 					.catch(() => {})
 			),
 			fetch('mix/tracks.json')
@@ -202,7 +209,8 @@ audio.addEventListener('play', () => {
 	if ('mediaSession' in navigator) {
 		// Convert relative path to absolute URL for media session
 		// Use document.baseURI to correctly resolve paths in subdirectories
-		const albumArtUrl = new URL('mix/album_art.jpg', document.baseURI).href;
+		const albumArtPath = hasCustomAlbumArt ? 'mix/album_art.jpg' : 'resources/album_art.jpg';
+		const albumArtUrl = new URL(albumArtPath, document.baseURI).href;
 		navigator.mediaSession.metadata = new MediaMetadata({
 			title: track.title,
 			artist: track.artist,

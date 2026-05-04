@@ -66,7 +66,7 @@ hits different, right?<br><br>
 	(pictured: integration with iOS lockscreen controls)
 
 ## customization
-add `custom.css`, `custom.js` and/or `album_art.jpg` to `/mix` to customize your mixapp's appearance and behavior. these files are automatically loaded if present.
+add your own `custom.css`, `custom.js`, and/or `album_art.jpg` to `/mix` to customize your mixapp's appearance and behavior.
 
 ## intellectual property notice
 ensure you have the right to distribute any media files you include in public mixapps. personal archival backups are for your own use. sharing them with others, even as a gift, is not covered by fair use or backup exceptions.

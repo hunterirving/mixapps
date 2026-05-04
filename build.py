@@ -141,6 +141,7 @@ def build_pwa(app_name=None, base_path=None):
 		"resources/script.js",
 		"mix/tracks.json",
 		"resources/icon.png",
+		"resources/album_art.jpg",
 		"resources/play.svg",
 		"resources/pause.svg",
 		"resources/prev.svg",

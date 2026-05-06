@@ -8,6 +8,12 @@ import json
 import re
 from pathlib import Path
 
+# Bootstrap into the shared venv first thing (re-execs on first run),
+# so scan.rescan() has mutagen available when we call it before building.
+import scan
+scan.bootstrap(__file__)
+
+
 def get_configuration():
 	"""Prompt user for configuration values"""
 	print("=" * 60)
@@ -95,9 +101,12 @@ def build_pwa(app_name=None, base_path=None):
 	print("Building PWA files...")
 	print(f"  Cache name: {cache_name}")
 
-	# Load tracks.json
+	# Rescan /mix so tracks.json reflects any additions/removals on disk
+	# before we snapshot it into the service worker's static file list.
+	scan.rescan(silent=True)
+
 	if not TRACKS_JSON.exists():
-		print("Error: tracks.json not found. Run scan.py first.")
+		print("Error: tracks.json not found.")
 		return
 
 	with open(TRACKS_JSON, 'r', encoding='utf-8') as f:

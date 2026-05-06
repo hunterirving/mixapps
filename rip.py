@@ -6,6 +6,13 @@ Uses system tools: ffmpeg/ffprobe (no Python dependencies needed)
 
 import os
 import sys
+
+# Hop into the shared venv (managed by scan.py) before doing anything else,
+# so scan.rescan() has mutagen available when we call it after ripping.
+sys.path.insert(0, str(os.path.dirname(os.path.abspath(__file__))))
+import scan
+scan.bootstrap(__file__)
+
 import subprocess
 import shutil
 import time
@@ -361,10 +368,12 @@ def rip_cd():
 	print(f"\n✓ Successfully ripped {success_count}/{len(audio_files)} tracks in {total_minutes}m {total_secs}s.")
 
 	if success_count > 0:
+		# Pick up the newly-ripped tracks (with the artist tag we just wrote
+		# via ffmpeg) into tracks.json in disk order.
+		scan.rescan(silent=True)
+
 		print(f"\nTracks saved to: {MIX_DIR}")
-		print("\nNext steps:")
-		print("  1. Run scan.py to generate tracks.json with metadata")
-		print("  2. Run serve.py to test your mixtape locally")
+		print("\nNext step: run serve.py to test your mixtape locally.")
 
 		# Eject the CD
 		print("\nEjecting CD...")

@@ -1,3 +1,7 @@
+/* Local-only reorder/rename code used when refining your mix via serve.py */
+
+// Drag to reorder
+
 const REORDER_DRAG_THRESHOLD = 5;
 const LONG_PRESS_MS = 400;
 const LONG_PRESS_MOVE_TOLERANCE = 10;
@@ -362,3 +366,185 @@ function saveTrackOrder() {
 		body: JSON.stringify(persisted),
 	}).catch(err => console.error('Failed to save order:', err));
 }
+
+// Live sync over SSE
+
+// Swap the now-playing text without disturbing an in-flight marquee
+function updateNowPlayingTextInPlace(text) {
+	const span = currentTrackDisplay.querySelector('span');
+	if (!span) {
+		updateCurrentTrackDisplay(text);
+		return;
+	}
+
+	// If the marquee isn't currently animating, decide whether the new text needs animation
+	if (!marqueeAnimating) {
+		span.textContent = text;
+		const containerWidth = currentTrackDisplay.offsetWidth - 30;
+		if (span.scrollWidth > containerWidth) {
+			marqueeOriginalText = text;
+			setupMarquee({ preserveOffset: true });
+		} else {
+			marqueeOriginalText = text;
+		}
+		return;
+	}
+
+	// Marquee is animating. Update the duplicated text in place, recompute
+	// the half-width (since the new text may differ in length), and wrap
+	// the current offset into the new range
+	marqueeOriginalText = text;
+	const spacing = '            ';
+	span.textContent = text + spacing + text + spacing;
+
+	const containerWidth = currentTrackDisplay.offsetWidth - 30;
+	if (span.scrollWidth / 2 <= containerWidth) {
+		// New text fits — stop the marquee cleanly.
+		setupMarquee({ preserveOffset: true });
+		return;
+	}
+
+	marqueeHalfWidth = span.scrollWidth / 2;
+	marqueeOffset = marqueeOffset % marqueeHalfWidth;
+	span.style.transform = `translateX(-${marqueeOffset}px)`;
+}
+
+// Skip the very first SSE message so we don't double-render before the player has finished its
+// initial setup.
+let sseSeenInitial = false;
+
+function tracksEqual(a, b) {
+	if (a.length !== b.length) return false;
+	for (let i = 0; i < a.length; i++) {
+		if (a[i].filename !== b[i].filename) return false;
+		if (a[i].title !== b[i].title) return false;
+		if (a[i].artist !== b[i].artist) return false;
+	}
+	return true;
+}
+
+function applyRenames(renames) {
+	for (const { from, to } of renames) {
+		if (from === to) continue;
+
+		if (preloadedAudio[from]) {
+			preloadedAudio[to] = preloadedAudio[from];
+			delete preloadedAudio[from];
+		}
+
+		if (cachedTracks.has(from)) {
+			cachedTracks.delete(from);
+			cachedTracks.add(to);
+		}
+
+		const oldUrl = `mix/${from}`;
+		if (audio.src && audio.src.endsWith(oldUrl)) {
+			const wasPlaying = !audio.paused;
+			const t = audio.currentTime;
+			audio.src = `mix/${to}`;
+			audio.load();
+			audio.addEventListener('loadedmetadata', function resume() {
+				audio.removeEventListener('loadedmetadata', resume);
+				try { audio.currentTime = t; } catch (e) {}
+				if (wasPlaying) audio.play().catch(() => {});
+			}, { once: true });
+		}
+
+		const idx = tracks.findIndex(t => t.filename === from);
+		if (idx !== -1) tracks[idx].filename = to;
+	}
+}
+
+function reconcileTracks(incoming, renames) {
+	if (renames && renames.length) applyRenames(renames);
+
+	const incomingByName = new Map(incoming.map(t => [t.filename, t]));
+	const currentNames = new Set(tracks.map(t => t.filename));
+	const incomingNames = new Set(incomingByName.keys());
+
+	if (tracks.length > 0 && tracksEqual(tracks, incoming)) return;
+
+	const playingFilename = tracks[currentTrackIndex] && tracks[currentTrackIndex].filename;
+	const playingRemoved = playingFilename && !incomingNames.has(playingFilename);
+
+	// Free blob URLs for tracks that disappeared.
+	for (const name of currentNames) {
+		if (!incomingNames.has(name) && preloadedAudio[name]) {
+			try { URL.revokeObjectURL(preloadedAudio[name].blobUrl); } catch (e) {}
+			delete preloadedAudio[name];
+		}
+	}
+
+	const loopingByName = new Map(tracks.map(t => [t.filename, t.looping || false]));
+	const newTracks = incoming.map(t => ({ ...t, looping: loopingByName.get(t.filename) || false }));
+
+	tracks.length = 0;
+	tracks.push(...newTracks);
+
+	if (tracks.length === 0) {
+		playerReady = false;
+		try { audio.pause(); } catch (e) {}
+		audio.removeAttribute('src');
+		audio.load();
+		isPlaying = false;
+		resetProgressBar();
+		updatePlayPauseButton();
+		updateCurrentTrackDisplay('No tracks found');
+		playlist.innerHTML = '';
+		return;
+	}
+
+	playerReady = true;
+
+	if (playingRemoved) {
+		// Playing track is gone: stop, advance to the next-best slot, and
+		// drop into "Ready to play".
+		try { audio.pause(); } catch (e) {}
+		audio.removeAttribute('src');
+		audio.load();
+		isPlaying = false;
+		resetProgressBar();
+		const nextIndex = Math.min(currentTrackIndex, tracks.length - 1);
+		setCurrentTrackIndex(nextIndex);
+		const next = tracks[nextIndex];
+		updateCurrentTrackDisplay(`Ready to play: ${next.artist} – ${next.title}`);
+		updatePlayPauseButton();
+	} else if (playingFilename) {
+		// Playing track survived (possibly via a rename applied above): its
+		// index may have shifted because of reorders or adds/removes
+		// elsewhere in the list.
+		const newIndex = tracks.findIndex(t => t.filename === playingFilename);
+		if (newIndex !== -1) setCurrentTrackIndex(newIndex);
+
+		const cur = tracks[currentTrackIndex];
+		if (cur) {
+			const isReady = currentTrackDisplay.textContent.includes('Ready to play:');
+			const text = isReady
+				? `Ready to play: ${cur.artist} – ${cur.title}`
+				: `${cur.artist} – ${cur.title}`;
+			updateNowPlayingTextInPlace(text);
+		}
+	}
+
+	renderPlaylist();
+
+	// Pick up any tracks added since last preload pass.
+	if (typeof preloadNextTrack === 'function') {
+		currentPreloadIndex = 0;
+		preloadNextTrack();
+	}
+}
+
+function startLiveSync() {
+	const source = new EventSource('/events');
+	source.addEventListener('tracks', (e) => {
+		const payload = JSON.parse(e.data);
+		if (!sseSeenInitial) {
+			sseSeenInitial = true;
+			return;
+		}
+		reconcileTracks(payload.tracks, payload.renames);
+	});
+}
+
+startLiveSync();

@@ -41,20 +41,17 @@ hits different, right?<br><br>
 		- `./rip.py` to rip tracks from a physical CD
 		- `./buy.py` to search for tracks to purchase (opens in iTunes on MacOS, <a href="https://song.link/i/1651294855">song.link</a> otherwise)
 
-2. **scan it**
-	- run `./scan.py` to create (or update) `tracks.json`, which defines the tracks available to the player.
-
-3. **serve it**
+2. **serve it**
 	- run `./serve.py` to start a local HTTP server for testing. you can scan the QR code printed to your terminal to test the app from any device on your local network.
-	- while the server is running, you can drag tracks up or down in the list to refine your mix (this automatically updates `tracks.json`).
-	
-4. **build it**
-	- run `./build.py` and follow the interactive prompts to generate `manifest.json` and `service-worker.js`, which enable PWA installation and offline functionality.
+		- while the server is running, you can drag tracks up or down in the list to reorder them.
 
-5. **ship it**
+3. **build it**
+	- once you're happy with your mix, run `./build.py` and follow the interactive prompts to generate `manifest.json` and `service-worker.js`, which enable PWA installation and offline functionality.
+
+4. **ship it**
 	- upload the entire project directory to any static web host with HTTPS support (GitHub Pages, Neocities, AWS S3, etc.)
 
-6. **share it**
+5. **share it**
 	- send the hosted URL to your recipient and walk them through the installation process:
 		- **iOS (Safari)**: tap `···` → `Share` → `View More` → scroll down to reveal and tap `Add to Home Screen` → `Add`
 		- **Android**:

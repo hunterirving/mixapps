@@ -9,12 +9,19 @@ Usage:
 """
 
 import sys
+import os
+
+# Hop into the shared venv (managed by scan.py) before doing anything else,
+# so scan.rescan() has mutagen available when we call it after a purchase.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import scan
+scan.bootstrap(__file__)
+
 import urllib.parse
 import urllib.request
 import json
 import platform
 import webbrowser
-import os
 import shutil
 import time
 
@@ -151,10 +158,11 @@ def main():
 	
 	before = snapshot_audio_files(ITUNES_MUSIC_DIR)
 	new_file = wait_for_new_file(ITUNES_MUSIC_DIR, before)
-	
+
 	filename = os.path.basename(new_file)
 	dest = os.path.join(MIX_DIR, filename)
 	shutil.copy2(new_file, dest)
+	scan.rescan(silent=True)
 	print(f"Added to /mix: {filename}")
 
 

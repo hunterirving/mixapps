@@ -23,6 +23,5 @@ mix/*
 manifest.json
 service-worker.js
 
-# Personal deployment scripts
+# Personal deployment script
 push.py
-cleanup.py

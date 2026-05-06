@@ -121,7 +121,7 @@ function beginDrag() {
 	r.item.style.top = `${rect.top}px`;
 	r.item.style.width = `${playlistRect.width}px`;
 	r.item.style.height = `${rect.height}px`;
-	r.item.style.zIndex = '10';
+	r.item.style.zIndex = '3';
 	document.body.appendChild(r.item);
 	// Now we're actually dragging — disable pointer-events on the other items
 	document.body.classList.add('reordering');
@@ -167,7 +167,7 @@ function positionDraggedItem() {
 	const controlsRect = controls.getBoundingClientRect();
 	const desiredTop = r.lastClientY - r.offsetY;
 	const minTop = wrapperRect.top;
-	const maxTop = controlsRect.top - r.itemHeight;
+	const maxTop = controlsRect.top - r.itemHeight / 2;
 	const clampedTop = Math.max(minTop, Math.min(maxTop, desiredTop));
 	r.item.style.top = `${clampedTop}px`;
 

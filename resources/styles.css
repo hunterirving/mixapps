@@ -75,7 +75,7 @@ body {
 	left: 0;
 	right: 0;
 	box-sizing: border-box;
-	z-index: 3;
+	z-index: 4;
 	pointer-events: none;
 }
 

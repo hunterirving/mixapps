@@ -613,7 +613,10 @@ function reconcileTracks(incoming, renames) {
 		}
 	}
 
-	renderPlaylist();
+	if (batchUploadsInFlight === 0) {
+		renderPlaylist();
+		flushPendingDropAnimation();
+	}
 
 	// Pick up any tracks added since last preload pass.
 	if (typeof preloadNextTrack === 'function') {
@@ -635,3 +638,165 @@ function startLiveSync() {
 }
 
 startLiveSync();
+
+// Drag-and-drop file upload
+
+const SUPPORTED_DROP_EXTS = ['.mp3', '.m4a', '.ogg', '.flac', '.wav'];
+
+// Snapshots of row positions captured at drop time, awaiting the SSE round-trip
+// so we can FLIP-animate displaced rows once the new tracks land.
+let pendingDropAnimations = [];
+
+// While > 0, a drag-drop batch is uploading. SSE updates land in `tracks`
+// but renderPlaylist is deferred so the user only sees the final layout.
+// Avoids snap-flashing through each intermediate ordering.
+let batchUploadsInFlight = 0;
+
+function dragHasFiles(e) {
+	if (!e.dataTransfer) return false;
+	const types = e.dataTransfer.types;
+	if (!types) return false;
+	for (let i = 0; i < types.length; i++) {
+		if (types[i] === 'Files') return true;
+	}
+	return false;
+}
+
+document.addEventListener('dragover', (e) => {
+	if (!dragHasFiles(e)) return;
+	e.preventDefault();
+	if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+});
+
+document.addEventListener('drop', (e) => {
+	if (!dragHasFiles(e)) return;
+	e.preventDefault();
+
+	const files = Array.from(e.dataTransfer.files || []).filter(f => {
+		const lower = f.name.toLowerCase();
+		return SUPPORTED_DROP_EXTS.some(ext => lower.endsWith(ext));
+	});
+	if (files.length === 0) return;
+
+	const insertAfter = computeInsertAfterIndex(e.clientY);
+	uploadFiles(files, insertAfter);
+});
+
+function computeInsertAfterIndex(clientY) {
+	const items = Array.from(playlist.querySelectorAll('.playlist-item'));
+	if (items.length === 0) return -1;
+	let aboveCount = 0;
+	for (const item of items) {
+		const rect = item.getBoundingClientRect();
+		if (rect.top + rect.height / 2 < clientY) aboveCount++;
+		else break;
+	}
+	return aboveCount - 1;
+}
+
+function uploadFiles(files, insertAfter) {
+	const snapshot = { positions: snapshotRowPositions(), ready: false };
+	pendingDropAnimations.push(snapshot);
+	batchUploadsInFlight++;
+
+	const dropSnapshot = () => {
+		const idx = pendingDropAnimations.indexOf(snapshot);
+		if (idx !== -1) pendingDropAnimations.splice(idx, 1);
+	};
+
+	let cursor = insertAfter;
+	const results = [];
+	const chain = files.reduce((p, file) => p.then(() => {
+		return uploadOneFile(file, cursor).then(r => {
+			results.push(r);
+			if (r && typeof r.final_index === 'number' && r.final_index >= 0) {
+				cursor = r.final_index;
+			} else {
+				cursor++;
+			}
+		});
+	}), Promise.resolve());
+
+	chain.then(() => {
+		batchUploadsInFlight--;
+		const noBroadcast = results.every(r => r && r.duplicate && !r.moved);
+		if (noBroadcast) {
+			dropSnapshot();
+			return;
+		}
+		snapshot.ready = true;
+		// Render once against the final batch state, then FLIP-animate from
+		// the pre-drop snapshot.
+		if (batchUploadsInFlight === 0) {
+			renderPlaylist();
+			flushPendingDropAnimation();
+		}
+	}).catch(err => {
+		batchUploadsInFlight--;
+		console.error('Upload failed:', err);
+		dropSnapshot();
+		if (batchUploadsInFlight === 0) renderPlaylist();
+	});
+}
+
+function uploadOneFile(file, insertAfter) {
+	return fetch('/upload/' + encodeURIComponent(file.name), {
+		method: 'PUT',
+		headers: {
+			'Content-Type': 'application/octet-stream',
+			'X-Insert-After': String(insertAfter),
+		},
+		body: file,
+	}).then(r => {
+		if (!r.ok) throw new Error('upload failed: ' + r.status);
+		return r.json().catch(() => ({}));
+	});
+}
+
+function snapshotRowPositions() {
+	const map = new Map();
+	const items = playlist.querySelectorAll('.playlist-item');
+	items.forEach((el, i) => {
+		const t = tracks[i];
+		if (t) map.set(t.filename, el.getBoundingClientRect().top);
+	});
+	return map;
+}
+
+function flushPendingDropAnimation() {
+	const ready = pendingDropAnimations.filter(s => s.ready);
+	if (ready.length === 0) return;
+	// Merge ready snapshots. For any filename, prefer the OLDEST recorded
+	// top so multi-file drops still animate from the original pre-drop
+	// position.
+	const merged = new Map();
+	for (const snap of ready) {
+		for (const [name, top] of snap.positions) {
+			if (!merged.has(name)) merged.set(name, top);
+		}
+	}
+	pendingDropAnimations = pendingDropAnimations.filter(s => !s.ready);
+
+	const items = playlist.querySelectorAll('.playlist-item');
+	items.forEach((el, i) => {
+		const t = tracks[i];
+		if (!t) return;
+		const oldTop = merged.get(t.filename);
+		if (oldTop === undefined) return;
+		const newTop = el.getBoundingClientRect().top;
+		const dy = oldTop - newTop;
+		if (!dy) return;
+		el.style.transition = 'none';
+		el.style.transform = `translateY(${dy}px)`;
+		void el.offsetHeight;
+		el.style.transition = 'transform 180ms ease';
+		el.style.transform = '';
+		const clear = (e) => {
+			if (e.propertyName !== 'transform') return;
+			el.style.transition = '';
+			el.style.transform = '';
+			el.removeEventListener('transitionend', clear);
+		};
+		el.addEventListener('transitionend', clear);
+	});
+}

@@ -23,6 +23,9 @@ VENV_DIR = SCRIPT_DIR / "venv"
 MIX_DIR = SCRIPT_DIR / "mix"
 TRACKS_PATH = MIX_DIR / "tracks.json"
 
+SUPPORTED_UPLOAD_EXTENSIONS = ('.mp3', '.m4a', '.ogg', '.flac', '.wav')
+MAX_UPLOAD_BYTES = 200 * 1024 * 1024  # 200 MB per request
+
 # Serializes all reads/writes of tracks.json so rescans, reorders, and future
 # uploads can't race each other.
 tracks_lock = threading.Lock()
@@ -123,6 +126,53 @@ def read_tracks():
 		return loaded if isinstance(loaded, list) else []
 	except (json.JSONDecodeError, OSError):
 		return []
+
+
+def _move_track_to(tracks, filename, insert_after):
+	"""Reorder `tracks` in place so the entry matching `filename` lands at
+	insert_after + 1 (clamped). Persists tracks.json if the order actually
+	changed. Returns True iff a move happened. Caller must hold tracks_lock."""
+	cur_idx = next((i for i, t in enumerate(tracks) if t.get('filename') == filename), -1)
+	if cur_idx == -1:
+		return False
+	target_idx = max(0, min(insert_after + 1, len(tracks) - 1))
+	if target_idx == cur_idx:
+		return False
+	entry = tracks.pop(cur_idx)
+	if target_idx > cur_idx:
+		target_idx -= 1
+	tracks.insert(target_idx, entry)
+	TRACKS_PATH.write_text(
+		json.dumps(tracks, indent='\t', ensure_ascii=False) + '\n',
+		encoding='utf-8',
+	)
+	return True
+
+
+def _canonical_name_for(audio_path, fallback_name):
+	"""Return the 'Artist – Title.ext' filename scan would canonicalize this
+	upload to, so we can dedup BEFORE moving the file into /mix. Returns None
+	if metadata can't be read."""
+	import scan
+	try:
+		from mutagen import File as MutagenFile  # type: ignore
+	except ImportError:
+		return None
+	try:
+		audio = MutagenFile(audio_path, easy=True)
+	except Exception:
+		return None
+	title = None
+	artist = None
+	if audio and audio.tags:
+		title = audio.tags.get('title', [None])[0]
+		artist = audio.tags.get('artist', [None])[0]
+	if not title:
+		title = Path(fallback_name).stem
+	if not artist:
+		artist = "Unknown Artist"
+	ext = Path(fallback_name).suffix
+	return f"{scan._sanitize_filename(artist)} – {scan._sanitize_filename(title)}{ext}"
 
 
 def broadcast_tracks(tracks, renames=None):
@@ -260,6 +310,14 @@ def start_server():
 				with sse_subscribers_lock:
 					sse_subscribers.discard(q)
 
+		def _reply_json(self, status, payload):
+			body = json.dumps(payload).encode('utf-8')
+			self.send_response(status)
+			self.send_header('Content-Type', 'application/json')
+			self.send_header('Content-Length', str(len(body)))
+			self.end_headers()
+			self.wfile.write(body)
+
 		def _send_sse_event(self, event, data):
 			payload = json.dumps(data, ensure_ascii=False)
 			message = f'event: {event}\ndata: {payload}\n\n'.encode('utf-8')
@@ -282,6 +340,98 @@ def start_server():
 				broadcast_tracks(payload)
 			self.send_response(204)
 			self.end_headers()
+
+		def do_PUT(self):
+			# Local-only: drag-and-drop upload from a connected browser.
+			# Path is /upload/<url-encoded-filename>; headers carry the
+			# desired insertion index (X-Insert-After: -1 means prepend).
+			prefix = '/upload/'
+			if not self.path.startswith(prefix):
+				self.send_response(404)
+				self.end_headers()
+				return
+
+			raw_name = urllib.parse.unquote(self.path[len(prefix):])
+			# Strip any client-supplied path components.
+			filename = Path(raw_name).name
+			ext = Path(filename).suffix.lower()
+			if not filename or ext not in SUPPORTED_UPLOAD_EXTENSIONS:
+				self.send_response(415)
+				self.end_headers()
+				return
+
+			length = int(self.headers.get('Content-Length', '0'))
+			if length <= 0 or length > MAX_UPLOAD_BYTES:
+				self.send_response(413)
+				self.end_headers()
+				return
+
+			try:
+				insert_after = int(self.headers.get('X-Insert-After', '-1'))
+			except ValueError:
+				insert_after = -1
+
+			# Stream the body to a temp file in MIX_DIR, then move into place
+			# atomically so a partial write is never visible to the rescan.
+			MIX_DIR.mkdir(parents=True, exist_ok=True)
+			tmp_path = MIX_DIR / (filename + '.uploading')
+			try:
+				with open(tmp_path, 'wb') as out:
+					remaining = length
+					while remaining > 0:
+						chunk = self.rfile.read(min(64 * 1024, remaining))
+						if not chunk:
+							break
+						out.write(chunk)
+						remaining -= len(chunk)
+				if remaining != 0:
+					tmp_path.unlink(missing_ok=True)
+					self.send_response(400)
+					self.end_headers()
+					return
+
+				with tracks_lock:
+					import scan
+					# Dedup by canonical name: if a file with the canonical
+					# "Artist – Title.ext" name already lives in /mix, drop
+					# the upload and just reorder the existing entry to the
+					# requested slot so the client still gets the FLIP.
+					canonical = _canonical_name_for(tmp_path, filename)
+					if canonical and (MIX_DIR / canonical).exists():
+						tmp_path.unlink(missing_ok=True)
+						tracks = read_tracks()
+						moved = _move_track_to(tracks, canonical, insert_after)
+						if moved:
+							broadcast_tracks(tracks)
+						final_index = next((i for i, t in enumerate(tracks) if t.get('filename') == canonical), -1)
+						self._reply_json(200, {'filename': canonical, 'duplicate': True, 'moved': moved, 'final_index': final_index})
+						return
+
+					tmp_path.rename(MIX_DIR / filename)
+					placed_name = filename
+
+					tracks, _changed, renames = scan.rescan(silent=True)
+
+					# Find the canonical (post-canonicalize) filename for the
+					# upload by following the rename chain.
+					new_name = placed_name
+					for r in renames:
+						if r['from'] == new_name:
+							new_name = r['to']
+
+					_move_track_to(tracks, new_name, insert_after)
+					broadcast_tracks(tracks, renames=renames)
+					final_index = next((i for i, t in enumerate(tracks) if t.get('filename') == new_name), -1)
+
+				self._reply_json(200, {'filename': new_name, 'final_index': final_index})
+			except Exception as e:
+				tmp_path.unlink(missing_ok=True)
+				self.send_response(500)
+				self.end_headers()
+				try:
+					self.wfile.write(str(e).encode('utf-8'))
+				except Exception:
+					pass
 
 		def do_DELETE(self):
 			# Local-only: remove a track's audio file from /mix and prune

@@ -43,7 +43,7 @@ hits different, right?<br><br>
 
 2. **serve it**
 	- run `./serve.py` to start a local HTTP server for testing. you can scan the QR code printed to your terminal to test the app from any device on your local network.
-		- while the server is running, you can drag tracks up or down in the list to reorder them.
+		- while the server is running, you can drag tracks up or down in the list to reorder them, or `shift + click` to delete them.
 
 3. **build it**
 	- once you're happy with your mix, run `./build.py` and follow the interactive prompts to generate `manifest.json` and `service-worker.js`, which enable PWA installation and offline functionality.

@@ -14,12 +14,14 @@ import queue
 import threading
 import subprocess
 import time
+import urllib.parse
 from pathlib import Path
 
 DEFAULT_PORT = 8000
 SCRIPT_DIR = Path(__file__).parent.absolute()
 VENV_DIR = SCRIPT_DIR / "venv"
-TRACKS_PATH = SCRIPT_DIR / "mix" / "tracks.json"
+MIX_DIR = SCRIPT_DIR / "mix"
+TRACKS_PATH = MIX_DIR / "tracks.json"
 
 # Serializes all reads/writes of tracks.json so rescans, reorders, and future
 # uploads can't race each other.
@@ -278,6 +280,46 @@ def start_server():
 					encoding='utf-8',
 				)
 				broadcast_tracks(payload)
+			self.send_response(204)
+			self.end_headers()
+
+		def do_DELETE(self):
+			# Local-only: remove a track's audio file from /mix and prune
+			# tracks.json. Path is /tracks/<url-encoded-filename>.
+			prefix = '/tracks/'
+			if not self.path.startswith(prefix):
+				self.send_response(404)
+				self.end_headers()
+				return
+
+			filename = urllib.parse.unquote(self.path[len(prefix):])
+			target = (MIX_DIR / filename).resolve()
+			try:
+				target.relative_to(MIX_DIR.resolve())
+			except ValueError:
+				self.send_response(400)
+				self.end_headers()
+				return
+			if target == TRACKS_PATH.resolve() or target.name != filename:
+				self.send_response(400)
+				self.end_headers()
+				return
+			with tracks_lock:
+				try:
+					target.unlink()
+				except FileNotFoundError:
+					pass
+				except OSError as e:
+					self.send_response(500)
+					self.end_headers()
+					self.wfile.write(str(e).encode('utf-8'))
+					return
+				tracks = [t for t in read_tracks() if t.get('filename') != filename]
+				TRACKS_PATH.write_text(
+					json.dumps(tracks, indent='\t', ensure_ascii=False) + '\n',
+					encoding='utf-8',
+				)
+				broadcast_tracks(tracks)
 			self.send_response(204)
 			self.end_headers()
 

@@ -12,6 +12,16 @@ function attachReorderHandlers(item, index) {
 	item.addEventListener('mousedown', (e) => {
 		// Ignore non-primary buttons
 		if (e.button !== 0) return;
+		if (e.shiftKey) {
+			e.preventDefault();
+			e.stopPropagation();
+			item._suppressClick = true;
+			const t = tracks[index];
+			if (!t) return;
+			if (!confirm(`Delete ${t.artist} – ${t.title}?`)) return;
+			deleteTrack(index);
+			return;
+		}
 		startReorder(item, index, e.clientX, e.clientY);
 	});
 
@@ -365,6 +375,83 @@ function saveTrackOrder() {
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify(persisted),
 	}).catch(err => console.error('Failed to save order:', err));
+}
+
+// Shift+click delete
+
+function deleteTrack(index) {
+	const removed = tracks[index];
+	if (!removed) return;
+
+	// Snapshot old positions of every playlist row keyed by filename, so we
+	// can FLIP-animate the survivors after re-rendering.
+	const beforeItems = Array.from(playlist.querySelectorAll('.playlist-item'));
+	const oldTopByFilename = new Map();
+	beforeItems.forEach((el, i) => {
+		const t = tracks[i];
+		if (t) oldTopByFilename.set(t.filename, el.getBoundingClientRect().top);
+	});
+
+	const wasPlaying = currentTrackIndex === index;
+
+	// Free any preloaded blob for the deleted track
+	if (preloadedAudio[removed.filename]) {
+		try { URL.revokeObjectURL(preloadedAudio[removed.filename].blobUrl); } catch (e) {}
+		delete preloadedAudio[removed.filename];
+	}
+
+	tracks.splice(index, 1);
+
+	if (wasPlaying) {
+		try { audio.pause(); } catch (e) {}
+		audio.removeAttribute('src');
+		audio.load();
+		isPlaying = false;
+		resetProgressBar();
+		if (tracks.length === 0) {
+			playerReady = false;
+			updateCurrentTrackDisplay('No tracks found');
+			updatePlayPauseButton();
+		} else {
+			const nextIndex = Math.min(index, tracks.length - 1);
+			setCurrentTrackIndex(nextIndex);
+			const next = tracks[nextIndex];
+			updateCurrentTrackDisplay(`Ready to play: ${next.artist} – ${next.title}`);
+			updatePlayPauseButton();
+		}
+	} else if (currentTrackIndex > index) {
+		setCurrentTrackIndex(currentTrackIndex - 1);
+	}
+
+	renderPlaylist();
+
+	// FLIP: translate each surviving row from its old top to its new top.
+	const afterItems = playlist.querySelectorAll('.playlist-item');
+	afterItems.forEach((el, i) => {
+		const t = tracks[i];
+		if (!t) return;
+		const oldTop = oldTopByFilename.get(t.filename);
+		if (oldTop === undefined) return;
+		const newTop = el.getBoundingClientRect().top;
+		const dy = oldTop - newTop;
+		if (!dy) return;
+		el.style.transition = 'none';
+		el.style.transform = `translateY(${dy}px)`;
+		void el.offsetHeight;
+		el.style.transition = 'transform 180ms ease';
+		el.style.transform = '';
+		const clear = (e) => {
+			if (e.propertyName !== 'transform') return;
+			el.style.transition = '';
+			el.style.transform = '';
+			el.removeEventListener('transitionend', clear);
+		};
+		el.addEventListener('transitionend', clear);
+	});
+
+	fetch('/tracks/' + encodeURIComponent(removed.filename), { method: 'DELETE' })
+		.then(r => { if (!r.ok) throw new Error('delete failed: ' + r.status); })
+		.catch(err => console.error('Failed to delete track:', err));
 }
 
 // Live sync over SSE

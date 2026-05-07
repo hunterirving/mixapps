@@ -284,7 +284,7 @@ audio.addEventListener('loadedmetadata', () => {
 function renderPlaylist() {
 	playlist.innerHTML = '';
 	const currentDisplayText = currentTrackDisplay.textContent;
-	const isInitialized = currentDisplayText !== 'No track playing';
+	const isInitialized = currentDisplayText !== '';
 
 	tracks.forEach((track, index) => {
 		const item = document.createElement('div');

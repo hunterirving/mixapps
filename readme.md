@@ -27,7 +27,7 @@ modern playlists are platform-locked, often require a paid subscription, and dec
 
 
 <p align="center">
-	<img src="readme_images/sorry.gif" width="550">
+	<br><img src="readme_images/sorry.gif" width="600"><br><br>
 </p>
 
 

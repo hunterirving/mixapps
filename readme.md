@@ -19,21 +19,19 @@ mixapps are like mixtapes or mix CDs, but packaged as <a href="https://hunterirv
 </p>
 
 ## own something and be happy
-modern playlist sharing is ephemeral and platform-locked. shared playlists often require a paid subscription, and decay as licenses expire.
-> [!WARNING]
-> <i>This song is no longer available in your country or region.</i>
+in the transition from physical mixtapes to cloud-hosted playlists, we stopped giving each other digital things.
 
-in the transition from physical mixtapes to cloud-hosted playlists, we stopped giving each other digital things. these days, we mostly point to things that we don't control.
+these days, we mostly point to things that we don't control.
+
+modern playlists are platform-locked, often require a paid subscription, and decay as licenes expire.
+
+<img src="readme_images/sorry.gif"><br>
 
 but our custom of gift-giving can be restored, if we restore the structures that enabled it.
 
-when you give someone a mixapp, you're giving them a digital artifact – something that can persist on their device independent of platforms, contracts, or corporate whim.<br><br>
+mixapps are digital artifacts. immutable objects that can persist on-device, independant of platforms, contracts, and corporate whim.<br><br>
 
-you gave them something.
-
-now it's theirs.
-
-hits different, right?<br><br>
+when you share one with a friend, it's theirs.<br><br>
 
 ## quickstart
 1. **load it**

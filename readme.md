@@ -23,7 +23,7 @@ in the transition from physical mixtapes to cloud-hosted playlists, we stopped g
 
 these days, we mostly point to things that we don't control.
 
-modern playlists are platform-locked, often require a paid subscription, and decay as licenes expire.
+modern playlists are platform-locked, often require a paid subscription, and decay as licenses expire.
 
 
 <p align="center">

@@ -25,7 +25,11 @@ these days, we mostly point to things that we don't control.
 
 modern playlists are platform-locked, often require a paid subscription, and decay as licenes expire.
 
-<img src="readme_images/sorry.gif"><br>
+
+<p align="center">
+	<img src="readme_images/sorry.gif" width="550">
+</p>
+
 
 but our custom of gift-giving can be restored, if we restore the structures that enabled it.
 

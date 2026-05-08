@@ -35,27 +35,22 @@ but our custom of gift-giving can be restored, if we restore the structures that
 
 mixapps are digital artifacts. immutable objects that can persist on-device, independant of platforms, contracts, and corporate whim.<br><br>
 
-when you share one with a friend, it's theirs.<br><br>
+once you share one with a friend, it's theirs.<br><br>
 
 ## quickstart
-1. **load it**
-	- add your audio files to the `/mix` directory, or use:
-		- `./rip.py` to rip tracks from a physical CD
-		- `./buy.py` to search for tracks to purchase (opens in iTunes on MacOS, <a href="https://song.link/i/1651294855">song.link</a> otherwise)
-
-2. **serve it**
-	- run `./serve.py` to start a local server for testing. you can scan the QR code printed to your terminal to test the app from any device on your local network. while the server is running, you can:
-		- **add new tracks** by dragging audio files onto the page
+1. **serve it**
+	- run `./serve.py` to start a development server. while the server is running, you can:
+		- **add new tracks** by moving audio files into the `/mix` directory, dragging them into the browser window, running `./rip.py` to rip tracks from a physical CD, or running `./buy.py` to buy tracks on iTunes
 		- **reorder tracks** by dragging them up or down in the list
 		- **delete tracks** with `shift + click`
 
-3. **build it**
+2. **build it**
 	- once you're happy with your mix, run `./build.py` and follow the interactive prompts to generate `manifest.json` and `service-worker.js`, which enable PWA installation and offline functionality.
 
-4. **ship it**
+3. **ship it**
 	- upload the entire project directory to any static web host with HTTPS support (GitHub Pages, Neocities, AWS S3, etc.)
 
-5. **share it**
+4. **share it**
 	- send the hosted URL to your recipient and walk them through the installation process:
 		- **iOS (Safari)**: tap `···` → `Share` → `View More` → scroll down to reveal and tap `Add to Home Screen` → `Add`
 		- **Android**:

@@ -1,6 +1,6 @@
 # 💿 mixapps
 
-mixapps are like mixtapes or mix CDs, but packaged as <a href="https://hunterirving.github.io/web_workshop/pages/PWA">Progressive Web Apps</a> that you can share with friends and install for offline use.
+mixapps are like mixtapes or mix CDs, but packaged as <a href="https://hunterirving.github.io/web_workshop/pages/pwa">Progressive Web Apps</a> that you can share with friends and install for offline use.
 
 <p align="center">
 	<img src="readme_images/collection.jpeg" width="550">

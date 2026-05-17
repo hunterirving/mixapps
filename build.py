@@ -115,6 +115,17 @@ def build_pwa(app_name=None, base_path=None):
 	# Get background color from styles.css
 	background_color = get_background_color()
 
+	# mix/album_art.jpg overrides the default
+	custom_album_art = SCRIPT_DIR / "mix" / "album_art.jpg"
+	album_art_file = custom_album_art if custom_album_art.exists() else SCRIPT_DIR / "resources" / "album_art.jpg"
+	album_art_path = "mix/album_art.jpg" if custom_album_art.exists() else "resources/album_art.jpg"
+	# append a content hash so the URL changes when the image changes
+	if album_art_file.exists():
+		import hashlib
+		art_hash = hashlib.md5(album_art_file.read_bytes()).hexdigest()[:8]
+		album_art_path = f"{album_art_path}?v={art_hash}"
+	print(f"  Album art: {album_art_path}")
+
 	# Generate manifest.json
 	manifest = {
 		"id": base_path,
@@ -127,6 +138,7 @@ def build_pwa(app_name=None, base_path=None):
 		"background_color": background_color,
 		"theme_color": background_color,
 		"cache_name": cache_name,  # Custom field for script.js to use
+		"album_art": album_art_path,  # Custom field for script.js to use
 		"icons": [
 			{
 				"src": f"{base_path}resources/icon.png",
@@ -150,7 +162,7 @@ def build_pwa(app_name=None, base_path=None):
 		"resources/script.js",
 		"mix/tracks.json",
 		"resources/icon.png",
-		"resources/album_art.jpg",
+		album_art_path,
 		"resources/play.svg",
 		"resources/pause.svg",
 		"resources/prev.svg",
@@ -160,7 +172,8 @@ def build_pwa(app_name=None, base_path=None):
 	]
 
 	AUDIO_EXTS = {".mp3", ".m4a", ".ogg", ".flac", ".wav"}
-	SKIP_NAMES = {"tracks.json", "readme.md"}
+	# album_art.jpg added explicitly above with a hash; skip to avoid a bare dupe
+	SKIP_NAMES = {"tracks.json", "readme.md", "album_art.jpg"}
 	for path in sorted((SCRIPT_DIR / "mix").iterdir()):
 		if not path.is_file():
 			continue

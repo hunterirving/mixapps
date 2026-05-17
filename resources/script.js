@@ -75,7 +75,7 @@ let isPreloadingPriority = false;
 let totalBytesLoaded = 0; // Track total filesize of all preloaded tracks
 let cachedTracks = new Set(); // Track which tracks are cached for offline use
 let CACHE_NAME = 'my-mixapp'; // Default fallback
-let hasCustomAlbumArt = false;
+let albumArtPath = 'resources/album_art.jpg'; // Overridden by manifest.album_art
 const staticFiles = [
 	'./',
 	'index.html',
@@ -83,7 +83,6 @@ const staticFiles = [
 	'resources/script.js',
 	'mix/tracks.json',
 	'resources/icon.png',
-	'resources/album_art.jpg',
 	'resources/play.svg',
 	'resources/pause.svg',
 	'resources/prev.svg',
@@ -131,17 +130,22 @@ fetch('manifest.json')
 			if (manifest.name) {
 				document.title = manifest.name;
 			}
+
+			// build.py resolves this to the custom mix art when present
+			if (manifest.album_art) {
+				albumArtPath = manifest.album_art;
+			}
 		}
+		staticFiles.push(albumArtPath);
 
 		// Probe for optional files and add them to staticFiles
-		const optionalFiles = ['mix/album_art.jpg', 'mix/custom.css', 'mix/custom.js'];
+		const optionalFiles = ['mix/custom.css', 'mix/custom.js'];
 		return Promise.all([
 			...optionalFiles.map(f =>
 				fetch(f, { method: 'HEAD' })
 					.then(r => {
 						if (r.ok) {
 							staticFiles.push(f);
-							if (f === 'mix/album_art.jpg') hasCustomAlbumArt = true;
 						}
 					})
 					.catch(() => {})
@@ -183,6 +187,20 @@ fetch('manifest.json')
 		updateCurrentTrackDisplay('Unable to load tracks. Please check your connection.');
 	});
 
+// Set MediaMetadata for the given track. albumArtPath is resolved at build time
+// (custom mix art if present, else default) and read from the manifest on startup.
+function updateMediaSessionMetadata(track) {
+	if (!('mediaSession' in navigator) || !track) return;
+	const albumArtUrl = new URL(albumArtPath, document.baseURI).href;
+	navigator.mediaSession.metadata = new MediaMetadata({
+		title: track.title,
+		artist: track.artist,
+		artwork: [
+			{ src: albumArtUrl, sizes: 'any', type: 'image/jpeg' }
+		]
+	});
+}
+
 // Audio event listeners
 audio.addEventListener('play', () => {
 	isPlaying = true;
@@ -207,20 +225,7 @@ audio.addEventListener('play', () => {
 
 	// Update media session metadata
 	if ('mediaSession' in navigator) {
-		// Convert relative path to absolute URL for media session
-		// Use document.baseURI to correctly resolve paths in subdirectories
-		const albumArtPath = hasCustomAlbumArt ? 'mix/album_art.jpg' : 'resources/album_art.jpg';
-		const albumArtUrl = new URL(albumArtPath, document.baseURI).href;
-		navigator.mediaSession.metadata = new MediaMetadata({
-			title: track.title,
-			artist: track.artist,
-			artwork: [
-				{ src: albumArtUrl, sizes: '860x860', type: 'image/jpeg' },
-				{ src: albumArtUrl, sizes: '512x512', type: 'image/jpeg' },
-				{ src: albumArtUrl, sizes: '256x256', type: 'image/jpeg' },
-				{ src: albumArtUrl, sizes: '128x128', type: 'image/jpeg' }
-			]
-		});
+		updateMediaSessionMetadata(track);
 
 		// Set action handlers after playback starts (required for iOS)
 		// Explicitly set seek handlers to null so iOS shows next/prev instead

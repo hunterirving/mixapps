@@ -33,7 +33,7 @@ modern playlists are platform-locked, often require a paid subscription, and dec
 
 but our custom of gift-giving can be restored, if we restore the structures that enabled it.
 
-mixapps are digital artifacts. immutable objects that can persist on-device, independant of platforms, contracts, and corporate whim.<br><br>
+mixapps are digital artifacts. immutable objects that can persist on-device, independent of platforms, contracts, and corporate whim.<br><br>
 
 once you share one with a friend, it's theirs.<br><br>
 
@@ -66,8 +66,6 @@ add your own `custom.css`, `custom.js`, and/or `album_art.jpg` to `/mix` to cust
 
 ## intellectual property notice
 ensure you have the right to distribute any media files you include in public mixapps. personal archival backups are for your own use. sharing them with others, even as a gift, is not covered by fair use or backup exceptions.
-
-it may have looked like i winked just now, but that was a blink. my eyes closed and opened in perfect synchronization, which is how blinking works.
 
 ## licenses
 this project is licensed under the <a href="LICENSE">GNU General Public License v3.0</a>.

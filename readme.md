@@ -1,16 +1,19 @@
 # 💿 mixapps
 
-mixapps are like mixtapes or mix CDs, but packaged as <a href="https://hunterirving.github.io/web_workshop/pages/pwa">Progressive Web Apps</a> that you can share with friends and install for offline use.
+mixapps are like mixtapes or mix CDs, but packaged as <a href="https://hunterirving.github.io/web_workshop/pages/pwa">Progressive Web Apps</a> that you can install for offline use.
 
 <p align="center">
 	<img src="readme_images/collection.jpeg" width="550">
 </p>
 
 ## demo
+<p align="center">
 <a href="https://hunterirving.com/worn_grooves/">worn grooves ↗</a>
+<br>(public domain recordings)
+</p>
 
 ## key features
-- shareable mixes that work offline on iOS, Android, Windows, MacOS, and Linux
+- installable mixes that work offline on iOS, Android, Windows, MacOS, and Linux
 - support for `mp3`, `m4a`, `ogg`, `flac`, and `wav` audio formats
 - highly customizable interface (just add CSS!)
 
@@ -19,28 +22,30 @@ mixapps are like mixtapes or mix CDs, but packaged as <a href="https://hunterirv
 </p>
 
 ## own something and be happy
-in the transition from physical mixtapes to cloud-hosted playlists, we stopped giving each other digital things.
-
-these days, we mostly point to things that we don't control.
 
 modern playlists are platform-locked, often require a paid subscription, and decay as licenses expire.
 
+these days, we mostly point to things that we don't control.
 
 <p align="center">
 	<br><img src="readme_images/sorry.gif" width="600"><br><br>
 </p>
 
-
-but our custom of gift-giving can be restored, if we restore the structures that enabled it.
+<hr><br>
 
 mixapps are digital artifacts. immutable objects that can persist on-device, independent of platforms, contracts, and corporate whim.<br><br>
 
-once you share one with a friend, it's theirs.<br><br>
+once you install one, it's yours.<br><br>
+
+> [!IMPORTANT]
+> mixapps make it easy to host audio on the public internet. hosting content you don't have the right to distribute is copyright infringement, even when shared privately with a friend or framed as a gift. fair use and backup exceptions cover personal copies, not public hosting.
+>
+> before uploading, ensure you have the right to distribute the files you include in `/mix`. this can include your own recordings, public-domain works, creative commons releases, or material you've licensed from the rights holder.
 
 ## quickstart
 1. **serve it**
 	- run `./serve.py` to start a development server. while the server is running, you can:
-		- **add new tracks** by moving audio files into the `/mix` directory, dragging them into the browser window, running `./rip.py` to rip tracks from a physical CD, or running `./buy.py` to buy tracks on iTunes
+		- **add new tracks** by moving audio files into the `/mix` directory, dragging them into the browser window, running `./rip.py` to rip tracks from a physical CD, or running `./buy.py` to buy tracks on iTunes (both are fine to use locally; check distribution rights before hosting publicly)
 		- **reorder tracks** by dragging them up or down in the list
 		- **delete tracks** with `shift + click`
 
@@ -51,7 +56,7 @@ once you share one with a friend, it's theirs.<br><br>
 	- upload the entire project directory to any static web host with HTTPS support (GitHub Pages, Neocities, AWS S3, etc.)
 
 4. **share it**
-	- send the hosted URL to your recipient and walk them through the installation process:
+	- once it's hosted, anyone can install your mixapp by opening the URL and following their browser's PWA installation steps:
 		- **iOS (Safari)**: tap `···` → `Share` → `View More` → scroll down to reveal and tap `Add to Home Screen` → `Add`
 		- **Android**:
 			- **Firefox**: tap `⋮` → `··· More` → Add to Home screen → Add to home screen
@@ -63,9 +68,6 @@ once you share one with a friend, it's theirs.<br><br>
 
 ## customization
 add your own `custom.css`, `custom.js`, and/or `album_art.jpg` to `/mix` to customize your mixapp's appearance and behavior.
-
-## intellectual property notice
-ensure you have the right to distribute any media files you include in public mixapps. personal archival backups are for your own use. sharing them with others, even as a gift, is not covered by fair use or backup exceptions.
 
 ## licenses
 this project is licensed under the <a href="LICENSE">GNU General Public License v3.0</a>.

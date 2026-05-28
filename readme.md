@@ -89,7 +89,7 @@ add your own `custom.css`, `custom.js`, and/or `album_art.jpg` to `mix/` to cust
 
 PWA installation requires a secure (HTTPS) connection. the easiest way to get one is to upload your files to a public host, but publishing files this way is distribution, which means it's only appropriate for content you have the right to distribute.
 
-however, if you'd like to install mixapps without pushing to a public host, you can use `https_serve.py` to serve the necessary files over HTTPS on your local network. because nothing is published, this path keeps your files on your own network and off the public internet.
+however, if you'd like to install mixapps without pushing to a public host, you can use `https_serve.py` to serve the necessary files over HTTPS on your local network.
 
 <h3>how it works</h3>
 
@@ -102,13 +102,13 @@ normally, an HTTPS site proves its identity with a certificate signed by a **cer
 
 on each device you want to install a mixapp to, you add your local CA to that device's list of trusted Certificate Authorities. after that, its browser will automatically accept the certificate presented by your local server, letting you connect and install your mixapp as a PWA.
 
-> [!NOTE]
-> trusting a CA tells a device to trust **any** HTTPS certificate the CA issues (for any website, not just your mixapp server). in effect, you're asking the installing device to trust your computer to vouch for the whole web.
->
-> in practice the risk is small, because an attack needs **three** things to line up at once: your CA's private key has leaked off your computer, the attacker is on a network where they can intercept the installing device's traffic, *and* that device still trusts the CA. deny any one and there's nothing to exploit, so a few habits keep you safe:
-> - **guard your local CA's private key**: as long as you don't move or share this file, it stays safely on your computer (see <a href="#cleaning-up">cleaning up</a>).
-> - **install over a network you control**: your own wifi, not public/shared.
-> - **leave trust disabled when it isn't needed**: iOS lets you toggle trust on/off per custom CA; on Android, you can remove the CA when you're done and re-add it next time you want to install (see <a href="#cleaning-up">cleaning up</a>).
+<h3>security</h3>
+trusting a CA tells a device to trust **any** HTTPS certificate the CA issues (for any website, not just your mixapp server). in effect, you're asking the installing device to trust your computer to vouch for the whole web.
+
+in practice the risk is small, because an attack needs **three** things to line up at once: your CA's private key has leaked off your computer, the attacker is on a network where they can intercept the installing device's traffic, *and* that device still trusts the CA. deny any one and there's nothing to exploit, so a few habits keep you safe:
+- **guard your local CA's private key**: as long as you don't move or share this file, it stays safely on your computer (see <a href="#cleaning-up">cleaning up</a>).
+- **install over a network you control**: your own wifi, not public/shared.
+- **leave trust disabled when it isn't needed**: iOS lets you toggle trust on/off per custom CA; on Android, you can remove the CA when you're done and re-add it next time you want to install (see <a href="#cleaning-up">cleaning up</a>).
 
 <h3>usage</h3>
 

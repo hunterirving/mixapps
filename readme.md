@@ -116,11 +116,11 @@ on each device you want to install a mixapp to, you add your local CA to that de
 2. **first time on a new device:** scan the first QR code to download the CA certificate, then install and trust it.
 	- **iOS:**
 		1. scanning the QR code prompts you to allow the download. tap **Allow**.<br>
-		<img src="readme_images/ios_ca_download.png" width="275" alt="iOS prompt: this website is trying to download a configuration profile"><br>
+		<img src="readme_images/ios_ca_download.jpeg" width="275" alt="iOS prompt: this website is trying to download a configuration profile"><br>
 		2. **install it:** open `Settings` → `General` → `VPN & Device Management`, tap the downloaded profile, and tap **Install**.<br>
-		<img src="readme_images/ios_ca_install.png" width="275" alt="iOS profile install screen for the mkcert CA"><br>
+		<img src="readme_images/ios_ca_install.jpeg" width="275" alt="iOS profile install screen for the mkcert CA"><br>
 		3. **trust it:** open `Settings` → `General` → `About` → `Certificate Trust Settings` and toggle the CA **on**.<br>
-		<img src="readme_images/ios_ca_trust.png" width="275" alt="iOS Certificate Trust Settings with the mkcert CA toggled on"><br>
+		<img src="readme_images/ios_ca_trust.gif" width="275" alt="iOS Certificate Trust Settings with the mkcert CA toggled on"><br>
 	- **Android:** open the downloaded file, or go to `Settings` → `Security` → `Encryption & credentials` → `Install a certificate` → `CA certificate`, and confirm the install. (on Android, installing a user CA is what makes it trusted; there's no separate trust toggle. exact menu names vary by version/manufacturer.)
 
 	a device that already trusts the CA from a previous run can skip this step.

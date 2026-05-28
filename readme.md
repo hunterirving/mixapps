@@ -103,6 +103,7 @@ normally, an HTTPS site proves its identity with a certificate signed by a **cer
 on each device you want to install a mixapp to, you add your local CA to that device's list of trusted Certificate Authorities. after that, its browser will automatically accept the certificate presented by your local server, letting you connect and install your mixapp as a PWA.
 
 <h3>security</h3>
+
 trusting a CA tells a device to trust **any** HTTPS certificate the CA issues (for any website, not just your mixapp server). in effect, you're asking the installing device to trust your computer to vouch for the whole web.
 
 in practice the risk is small, because an attack needs **three** things to line up at once: your CA's private key has leaked off your computer, the attacker is on a network where they can intercept the installing device's traffic, *and* that device still trusts the CA. deny any one and there's nothing to exploit, so a few habits keep you safe:

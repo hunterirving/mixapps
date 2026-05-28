@@ -206,6 +206,7 @@ const STATIC_FILES = {static_files_js};
 // Audio files will be cached by the main app's blob preloading system.
 self.addEventListener('install', (event) => {{
 	console.log('Service Worker installing...', 'Base path:', basePath);
+	self.skipWaiting();
 	event.waitUntil(
 		caches.open(CACHE_NAME).then(cache => {{
 			const absoluteUrls = STATIC_FILES.map(url => {{
@@ -244,6 +245,21 @@ self.addEventListener('install', (event) => {{
 	);
 }});
 
+self.addEventListener('activate', (event) => {{
+	event.waitUntil(self.clients.claim());
+}});
+
+// Network fetch capped with a timeout. A mixapp installed off the LAN points
+// at a private-IP origin that's usually gone by launch time; without a cap an
+// uncached request hangs on a TCP timeout and stalls startup (black→white
+// screen). Aborting fast turns that hang into an ordinary cache-miss failure.
+const fetchWithTimeout = (request, ms = 2000) => {{
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), ms);
+	return fetch(request, {{ signal: controller.signal }})
+		.finally(() => clearTimeout(timer));
+}};
+
 // Fetch event - cache first, network fallback
 self.addEventListener('fetch', (event) => {{
 	// Ignore non-http(s) requests like blob: URLs, data: URLs, chrome-extension:, etc.
@@ -259,9 +275,19 @@ self.addEventListener('fetch', (event) => {{
 					return cachedResponse;
 				}}
 
-				// Not in cache - try network
+				// Navigation that missed the exact cache key: serve the cached
+				// app shell so the document always renders from cache, online
+				// or off, even if the launch URL doesn't byte-match a key.
+				if (event.request.mode === 'navigate') {{
+					const shellUrl = new URL(basePath, self.location.href).href;
+					return caches.match(shellUrl)
+						.then(shell => shell || caches.match('index.html'))
+						.then(shell => shell || fetchWithTimeout(event.request));
+				}}
+
+				// Not in cache - try network (time-boxed; see fetchWithTimeout)
 				console.log('⟳ Fetching from network:', event.request.url);
-				return fetch(event.request)
+				return fetchWithTimeout(event.request)
 					.then((networkResponse) => {{
 						// Check if valid response
 						if (!networkResponse || networkResponse.status !== 200 || networkResponse.type === 'error') {{

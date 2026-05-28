@@ -41,7 +41,7 @@
 
 	<script src="resources/script.js"></script>
 	<script>
-		if (typeof isLocal !== 'undefined' && isLocal) {
+		if (typeof isLocal !== 'undefined' && isLocal && typeof isInstalled !== 'undefined' && !isInstalled) {
 			const s = document.createElement('script');
 			s.src = 'resources/dev.js';
 			document.body.appendChild(s);

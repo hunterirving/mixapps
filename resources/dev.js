@@ -383,14 +383,8 @@ function deleteTrack(index) {
 	const removed = tracks[index];
 	if (!removed) return;
 
-	// Snapshot old positions of every playlist row keyed by filename, so we
-	// can FLIP-animate the survivors after re-rendering.
-	const beforeItems = Array.from(playlist.querySelectorAll('.playlist-item'));
-	const oldTopByFilename = new Map();
-	beforeItems.forEach((el, i) => {
-		const t = tracks[i];
-		if (t) oldTopByFilename.set(t.filename, el.getBoundingClientRect().top);
-	});
+	// Snapshot row positions so survivors FLIP-animate after re-rendering.
+	const oldTops = snapshotRowTops();
 
 	const wasPlaying = currentTrackIndex === index;
 
@@ -424,30 +418,7 @@ function deleteTrack(index) {
 	}
 
 	renderPlaylist();
-
-	// FLIP: translate each surviving row from its old top to its new top.
-	const afterItems = playlist.querySelectorAll('.playlist-item');
-	afterItems.forEach((el, i) => {
-		const t = tracks[i];
-		if (!t) return;
-		const oldTop = oldTopByFilename.get(t.filename);
-		if (oldTop === undefined) return;
-		const newTop = el.getBoundingClientRect().top;
-		const dy = oldTop - newTop;
-		if (!dy) return;
-		el.style.transition = 'none';
-		el.style.transform = `translateY(${dy}px)`;
-		void el.offsetHeight;
-		el.style.transition = 'transform 180ms ease';
-		el.style.transform = '';
-		const clear = (e) => {
-			if (e.propertyName !== 'transform') return;
-			el.style.transition = '';
-			el.style.transform = '';
-			el.removeEventListener('transitionend', clear);
-		};
-		el.addEventListener('transitionend', clear);
-	});
+	flipRowsFrom(oldTops);
 
 	fetch('/tracks/' + encodeURIComponent(removed.filename), { method: 'DELETE' })
 		.then(r => { if (!r.ok) throw new Error('delete failed: ' + r.status); })
@@ -542,6 +513,41 @@ function applyRenames(renames) {
 	}
 }
 
+function snapshotRowTops() {
+	const tops = new Map();
+	const items = playlist.querySelectorAll('.playlist-item');
+	items.forEach((el, i) => {
+		const t = tracks[i];
+		if (t) tops.set(t.filename, el.getBoundingClientRect().top);
+	});
+	return tops;
+}
+
+function flipRowsFrom(oldTops) {
+	const items = playlist.querySelectorAll('.playlist-item');
+	items.forEach((el, i) => {
+		const t = tracks[i];
+		if (!t) return;
+		const oldTop = oldTops.get(t.filename);
+		if (oldTop === undefined) return;
+		const newTop = el.getBoundingClientRect().top;
+		const dy = oldTop - newTop;
+		if (!dy) return;
+		el.style.transition = 'none';
+		el.style.transform = `translateY(${dy}px)`;
+		void el.offsetHeight;
+		el.style.transition = 'transform 180ms ease';
+		el.style.transform = '';
+		const clear = (e) => {
+			if (e.propertyName !== 'transform') return;
+			el.style.transition = '';
+			el.style.transform = '';
+			el.removeEventListener('transitionend', clear);
+		};
+		el.addEventListener('transitionend', clear);
+	});
+}
+
 function reconcileTracks(incoming, renames) {
 	if (renames && renames.length) applyRenames(renames);
 
@@ -550,6 +556,10 @@ function reconcileTracks(incoming, renames) {
 	const incomingNames = new Set(incomingByName.keys());
 
 	if (tracks.length > 0 && tracksEqual(tracks, incoming)) return;
+
+	// Snapshot row positions before mutating `tracks` so a remote reorder
+	// arriving over SSE animates (FLIP) instead of jumping.
+	const oldTops = snapshotRowTops();
 
 	const playingFilename = tracks[currentTrackIndex] && tracks[currentTrackIndex].filename;
 	const playingRemoved = playingFilename && !incomingNames.has(playingFilename);
@@ -615,6 +625,7 @@ function reconcileTracks(incoming, renames) {
 
 	if (batchUploadsInFlight === 0) {
 		renderPlaylist();
+		flipRowsFrom(oldTops);
 		flushPendingDropAnimation();
 	}
 
@@ -638,6 +649,13 @@ function startLiveSync() {
 }
 
 startLiveSync();
+
+// script.js may have already rendered the playlist before this file loaded
+// (the all-cached fast path renders almost immediately), in which case those
+// rows have no reorder handlers. Re-render now that they're defined.
+if (canReorder && typeof renderPlaylist === 'function') {
+	renderPlaylist();
+}
 
 // Drag-and-drop file upload
 
@@ -695,7 +713,7 @@ function computeInsertAfterIndex(clientY) {
 }
 
 function uploadFiles(files, insertAfter) {
-	const snapshot = { positions: snapshotRowPositions(), ready: false };
+	const snapshot = { positions: snapshotRowTops(), ready: false };
 	pendingDropAnimations.push(snapshot);
 	batchUploadsInFlight++;
 
@@ -753,16 +771,6 @@ function uploadOneFile(file, insertAfter) {
 	});
 }
 
-function snapshotRowPositions() {
-	const map = new Map();
-	const items = playlist.querySelectorAll('.playlist-item');
-	items.forEach((el, i) => {
-		const t = tracks[i];
-		if (t) map.set(t.filename, el.getBoundingClientRect().top);
-	});
-	return map;
-}
-
 function flushPendingDropAnimation() {
 	const ready = pendingDropAnimations.filter(s => s.ready);
 	if (ready.length === 0) return;
@@ -777,26 +785,5 @@ function flushPendingDropAnimation() {
 	}
 	pendingDropAnimations = pendingDropAnimations.filter(s => !s.ready);
 
-	const items = playlist.querySelectorAll('.playlist-item');
-	items.forEach((el, i) => {
-		const t = tracks[i];
-		if (!t) return;
-		const oldTop = merged.get(t.filename);
-		if (oldTop === undefined) return;
-		const newTop = el.getBoundingClientRect().top;
-		const dy = oldTop - newTop;
-		if (!dy) return;
-		el.style.transition = 'none';
-		el.style.transform = `translateY(${dy}px)`;
-		void el.offsetHeight;
-		el.style.transition = 'transform 180ms ease';
-		el.style.transform = '';
-		const clear = (e) => {
-			if (e.propertyName !== 'transform') return;
-			el.style.transition = '';
-			el.style.transform = '';
-			el.removeEventListener('transitionend', clear);
-		};
-		el.addEventListener('transitionend', clear);
-	});
+	flipRowsFrom(merged);
 }

@@ -16,7 +16,10 @@ const isInstalled =
 	window.matchMedia('(display-mode: minimal-ui)').matches ||
 	window.navigator.standalone === true;
 
-if ('serviceWorker' in navigator && isInstalled && !isLocal) {
+// Register when installed as a PWA regardless of hostname so a mixapp
+// installed over LAN (via https_serve.py) caches for offline use too;
+// a plain browser tab still skips the SW so dev always sees latest files.
+if ('serviceWorker' in navigator && isInstalled) {
 	window.addEventListener('load', () => {
 		navigator.serviceWorker.register('service-worker.js')
 			.then(registration => {
@@ -26,9 +29,7 @@ if ('serviceWorker' in navigator && isInstalled && !isLocal) {
 				console.log('Service Worker registration failed:', error);
 			});
 	});
-} else if ('serviceWorker' in navigator) {
-	// Browser tab or local dev: tear down any existing SW and caches so
-	// the page always reflects the latest deploy.
+} else if ('serviceWorker' in navigator && !isLocal) {
 	navigator.serviceWorker.getRegistrations().then(registrations => {
 		registrations.forEach(r => r.unregister());
 	});
@@ -109,8 +110,9 @@ async function fetchWithRetry(url, maxRetries = 4, baseDelay = 2000) {
 	}
 }
 
-// Enable reordering UI only when served locally
-if (isLocal) {
+// Enable reordering UI only in a local browser tab (serve.py), never in an
+// installed PWA — there's no backend to persist reorders there.
+if (isLocal && !isInstalled) {
 	canReorder = true;
 	document.body.classList.add('reorderable');
 }
@@ -138,30 +140,42 @@ fetch('manifest.json')
 		}
 		staticFiles.push(albumArtPath);
 
-		// Probe for optional files and add them to staticFiles
 		const optionalFiles = ['mix/custom.css', 'mix/custom.js'];
-		return Promise.all([
-			...optionalFiles.map(f =>
+		const detectOptional = isInstalled
+			? caches.open(CACHE_NAME).then(cache =>
+				Promise.all(optionalFiles.map(f =>
+					cache.match(new URL(f, window.location.href).href)
+						.then(hit => { if (hit) staticFiles.push(f); })
+						.catch(() => {})
+				))
+			)
+			: Promise.all(optionalFiles.map(f =>
 				fetch(f, { method: 'HEAD' })
-					.then(r => {
-						if (r.ok) {
-							staticFiles.push(f);
-						}
-					})
+					.then(r => { if (r.ok) staticFiles.push(f); })
 					.catch(() => {})
-			),
-			fetch('mix/tracks.json')
+			));
+
+		// Load tracks.json cache-first when installed (instant, no network
+		// wait); network-first in a dev tab so reorders/edits show live.
+		const loadTracksFromCache = () =>
+			caches.open(CACHE_NAME)
+				.then(cache => cache.match(new URL('mix/tracks.json', window.location.href).href))
+				.then(r => r ? r.json() : Promise.reject('tracks.json not in cache'));
+		const loadTracks = isInstalled
+			? loadTracksFromCache().catch(() =>
+				fetch('mix/tracks.json').then(r => {
+					if (!r.ok) throw new Error('tracks.json not found');
+					return r.json();
+				})
+			)
+			: fetch('mix/tracks.json')
 				.then(r => {
 					if (!r.ok) throw new Error('tracks.json not found');
 					return r.json();
 				})
-				.catch(() => {
-					// Offline fallback: try loading from cache directly
-					return caches.open(CACHE_NAME)
-						.then(cache => cache.match('mix/tracks.json'))
-						.then(r => r ? r.json() : Promise.reject('tracks.json not in cache'));
-				})
-		]);
+				.catch(loadTracksFromCache);
+
+		return Promise.all([detectOptional, loadTracks]);
 	})
 	.then((results) => {
 		const data = results[results.length - 1];
@@ -347,7 +361,7 @@ function renderPlaylist() {
 			}
 			toggleLooping(index);
 		});
-		if (canReorder) {
+		if (canReorder && typeof attachReorderHandlers === 'function') {
 			attachReorderHandlers(item, index);
 		}
 		playlist.appendChild(item);

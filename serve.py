@@ -94,7 +94,6 @@ def print_qr_code(url):
 		# Get the QR code matrix
 		matrix = qr.get_matrix()
 
-		print("\nScan to connect:")
 		for y in range(0, len(matrix), 2):
 			line = ""
 			for x in range(len(matrix[y])):
@@ -222,6 +221,219 @@ def start_rescan_ticker(interval=1.0):
 	t.start()
 
 
+class TrackRequestHandler(http.server.SimpleHTTPRequestHandler):
+	def do_GET(self):
+		# Rescan /mix on every tracks.json fetch so the page always sees
+		# what's actually on disk (added via rip.py/buy.py or by hand).
+		if self.path == '/mix/tracks.json':
+			with tracks_lock:
+				rescan_and_maybe_broadcast()
+			return super().do_GET()
+
+		if self.path == '/events':
+			return self._serve_sse()
+
+		return super().do_GET()
+
+	def _serve_sse(self):
+		"""Server-Sent Events stream of tracks.json changes."""
+		self.send_response(200)
+		self.send_header('Content-Type', 'text/event-stream')
+		self.send_header('Cache-Control', 'no-cache')
+		self.send_header('Connection', 'keep-alive')
+		self.send_header('X-Accel-Buffering', 'no')
+		self.end_headers()
+
+		q = queue.Queue(maxsize=16)
+		with sse_subscribers_lock:
+			sse_subscribers.add(q)
+
+		try:
+			# Initial sync so a fresh tab gets the current state without
+			# waiting for the next change. No renames context: a fresh
+			# client has no prior state to migrate from.
+			with tracks_lock:
+				initial = read_tracks()
+			self._send_sse_event('tracks', {'tracks': initial, 'renames': []})
+
+			while True:
+				try:
+					payload = q.get(timeout=15)
+					self._send_sse_event('tracks', payload)
+				except queue.Empty:
+					# Heartbeat keeps proxies and idle connections from
+					# closing the stream.
+					self.wfile.write(b': keepalive\n\n')
+					self.wfile.flush()
+		except (BrokenPipeError, ConnectionResetError, OSError):
+			pass
+		finally:
+			with sse_subscribers_lock:
+				sse_subscribers.discard(q)
+
+	def _reply_json(self, status, payload):
+		body = json.dumps(payload).encode('utf-8')
+		self.send_response(status)
+		self.send_header('Content-Type', 'application/json')
+		self.send_header('Content-Length', str(len(body)))
+		self.end_headers()
+		self.wfile.write(body)
+
+	def _send_sse_event(self, event, data):
+		payload = json.dumps(data, ensure_ascii=False)
+		message = f'event: {event}\ndata: {payload}\n\n'.encode('utf-8')
+		self.wfile.write(message)
+		self.wfile.flush()
+
+	def do_POST(self):
+		# Local-only: receive a reordered tracks array and overwrite tracks.json
+		if self.path != '/tracks':
+			self.send_response(404)
+			self.end_headers()
+			return
+		length = int(self.headers.get('Content-Length', '0'))
+		payload = json.loads(self.rfile.read(length))
+		with tracks_lock:
+			TRACKS_PATH.write_text(
+				json.dumps(payload, indent='\t', ensure_ascii=False) + '\n',
+				encoding='utf-8',
+			)
+			broadcast_tracks(payload)
+		self.send_response(204)
+		self.end_headers()
+
+	def do_PUT(self):
+		# Local-only: drag-and-drop upload from a connected browser.
+		# Path is /upload/<url-encoded-filename>; headers carry the
+		# desired insertion index (X-Insert-After: -1 means prepend).
+		prefix = '/upload/'
+		if not self.path.startswith(prefix):
+			self.send_response(404)
+			self.end_headers()
+			return
+
+		raw_name = urllib.parse.unquote(self.path[len(prefix):])
+		# Strip any client-supplied path components.
+		filename = Path(raw_name).name
+		ext = Path(filename).suffix.lower()
+		if not filename or ext not in SUPPORTED_UPLOAD_EXTENSIONS:
+			self.send_response(415)
+			self.end_headers()
+			return
+
+		length = int(self.headers.get('Content-Length', '0'))
+		if length <= 0 or length > MAX_UPLOAD_BYTES:
+			self.send_response(413)
+			self.end_headers()
+			return
+
+		try:
+			insert_after = int(self.headers.get('X-Insert-After', '-1'))
+		except ValueError:
+			insert_after = -1
+
+		# Stream the body to a temp file in MIX_DIR, then move into place
+		# atomically so a partial write is never visible to the rescan.
+		MIX_DIR.mkdir(parents=True, exist_ok=True)
+		tmp_path = MIX_DIR / (filename + '.uploading')
+		try:
+			with open(tmp_path, 'wb') as out:
+				remaining = length
+				while remaining > 0:
+					chunk = self.rfile.read(min(64 * 1024, remaining))
+					if not chunk:
+						break
+					out.write(chunk)
+					remaining -= len(chunk)
+			if remaining != 0:
+				tmp_path.unlink(missing_ok=True)
+				self.send_response(400)
+				self.end_headers()
+				return
+
+			with tracks_lock:
+				import scan
+				# Dedup by canonical name: if a file with the canonical
+				# "Artist – Title.ext" name already lives in /mix, drop
+				# the upload and just reorder the existing entry to the
+				# requested slot so the client still gets the FLIP.
+				canonical = _canonical_name_for(tmp_path, filename)
+				if canonical and (MIX_DIR / canonical).exists():
+					tmp_path.unlink(missing_ok=True)
+					tracks = read_tracks()
+					moved = _move_track_to(tracks, canonical, insert_after)
+					if moved:
+						broadcast_tracks(tracks)
+					final_index = next((i for i, t in enumerate(tracks) if t.get('filename') == canonical), -1)
+					self._reply_json(200, {'filename': canonical, 'duplicate': True, 'moved': moved, 'final_index': final_index})
+					return
+
+				tmp_path.rename(MIX_DIR / filename)
+				placed_name = filename
+
+				tracks, _changed, renames = scan.rescan(silent=True)
+
+				# Find the canonical (post-canonicalize) filename for the
+				# upload by following the rename chain.
+				new_name = placed_name
+				for r in renames:
+					if r['from'] == new_name:
+						new_name = r['to']
+
+				_move_track_to(tracks, new_name, insert_after)
+				broadcast_tracks(tracks, renames=renames)
+				final_index = next((i for i, t in enumerate(tracks) if t.get('filename') == new_name), -1)
+
+			self._reply_json(200, {'filename': new_name, 'final_index': final_index})
+		except Exception as e:
+			tmp_path.unlink(missing_ok=True)
+			self.send_response(500)
+			self.end_headers()
+			try:
+				self.wfile.write(str(e).encode('utf-8'))
+			except Exception:
+				pass
+
+	def do_DELETE(self):
+		# Local-only: remove a track's audio file from /mix and prune
+		# tracks.json. Path is /tracks/<url-encoded-filename>.
+		prefix = '/tracks/'
+		if not self.path.startswith(prefix):
+			self.send_response(404)
+			self.end_headers()
+			return
+
+		filename = urllib.parse.unquote(self.path[len(prefix):])
+		target = (MIX_DIR / filename).resolve()
+		try:
+			target.relative_to(MIX_DIR.resolve())
+		except ValueError:
+			self.send_response(400)
+			self.end_headers()
+			return
+		if target == TRACKS_PATH.resolve() or target.name != filename:
+			self.send_response(400)
+			self.end_headers()
+			return
+		with tracks_lock:
+			try:
+				target.unlink()
+			except FileNotFoundError:
+				pass
+			except OSError as e:
+				self.send_response(500)
+				self.end_headers()
+				self.wfile.write(str(e).encode('utf-8'))
+				return
+			tracks = [t for t in read_tracks() if t.get('filename') != filename]
+			TRACKS_PATH.write_text(
+				json.dumps(tracks, indent='\t', ensure_ascii=False) + '\n',
+				encoding='utf-8',
+			)
+			broadcast_tracks(tracks)
+		self.send_response(204)
+		self.end_headers()
+
 def start_server():
 	"""Start the HTTP server (runs after venv is set up)"""
 	# Change to script directory
@@ -242,10 +454,9 @@ def start_server():
 	local_ip = get_local_ip()
 
 	# Create server
-	Handler = http.server.SimpleHTTPRequestHandler
 
 	# Suppress default logging and broken pipe errors
-	class QuietHandler(Handler):
+	class QuietHandler(TrackRequestHandler):
 		def end_headers(self):
 			self.send_header('Cache-Control', 'no-cache')
 			super().end_headers()
@@ -261,217 +472,6 @@ def start_server():
 				# Browser cancelled the request (normal for media streaming/preloading)
 				pass
 
-		def do_GET(self):
-			# Rescan /mix on every tracks.json fetch so the page always sees
-			# what's actually on disk (added via rip.py/buy.py or by hand).
-			if self.path == '/mix/tracks.json':
-				with tracks_lock:
-					rescan_and_maybe_broadcast()
-				return super().do_GET()
-
-			if self.path == '/events':
-				return self._serve_sse()
-
-			return super().do_GET()
-
-		def _serve_sse(self):
-			"""Server-Sent Events stream of tracks.json changes."""
-			self.send_response(200)
-			self.send_header('Content-Type', 'text/event-stream')
-			self.send_header('Cache-Control', 'no-cache')
-			self.send_header('Connection', 'keep-alive')
-			self.send_header('X-Accel-Buffering', 'no')
-			self.end_headers()
-
-			q = queue.Queue(maxsize=16)
-			with sse_subscribers_lock:
-				sse_subscribers.add(q)
-
-			try:
-				# Initial sync so a fresh tab gets the current state without
-				# waiting for the next change. No renames context: a fresh
-				# client has no prior state to migrate from.
-				with tracks_lock:
-					initial = read_tracks()
-				self._send_sse_event('tracks', {'tracks': initial, 'renames': []})
-
-				while True:
-					try:
-						payload = q.get(timeout=15)
-						self._send_sse_event('tracks', payload)
-					except queue.Empty:
-						# Heartbeat keeps proxies and idle connections from
-						# closing the stream.
-						self.wfile.write(b': keepalive\n\n')
-						self.wfile.flush()
-			except (BrokenPipeError, ConnectionResetError, OSError):
-				pass
-			finally:
-				with sse_subscribers_lock:
-					sse_subscribers.discard(q)
-
-		def _reply_json(self, status, payload):
-			body = json.dumps(payload).encode('utf-8')
-			self.send_response(status)
-			self.send_header('Content-Type', 'application/json')
-			self.send_header('Content-Length', str(len(body)))
-			self.end_headers()
-			self.wfile.write(body)
-
-		def _send_sse_event(self, event, data):
-			payload = json.dumps(data, ensure_ascii=False)
-			message = f'event: {event}\ndata: {payload}\n\n'.encode('utf-8')
-			self.wfile.write(message)
-			self.wfile.flush()
-
-		def do_POST(self):
-			# Local-only: receive a reordered tracks array and overwrite tracks.json
-			if self.path != '/tracks':
-				self.send_response(404)
-				self.end_headers()
-				return
-			length = int(self.headers.get('Content-Length', '0'))
-			payload = json.loads(self.rfile.read(length))
-			with tracks_lock:
-				TRACKS_PATH.write_text(
-					json.dumps(payload, indent='\t', ensure_ascii=False) + '\n',
-					encoding='utf-8',
-				)
-				broadcast_tracks(payload)
-			self.send_response(204)
-			self.end_headers()
-
-		def do_PUT(self):
-			# Local-only: drag-and-drop upload from a connected browser.
-			# Path is /upload/<url-encoded-filename>; headers carry the
-			# desired insertion index (X-Insert-After: -1 means prepend).
-			prefix = '/upload/'
-			if not self.path.startswith(prefix):
-				self.send_response(404)
-				self.end_headers()
-				return
-
-			raw_name = urllib.parse.unquote(self.path[len(prefix):])
-			# Strip any client-supplied path components.
-			filename = Path(raw_name).name
-			ext = Path(filename).suffix.lower()
-			if not filename or ext not in SUPPORTED_UPLOAD_EXTENSIONS:
-				self.send_response(415)
-				self.end_headers()
-				return
-
-			length = int(self.headers.get('Content-Length', '0'))
-			if length <= 0 or length > MAX_UPLOAD_BYTES:
-				self.send_response(413)
-				self.end_headers()
-				return
-
-			try:
-				insert_after = int(self.headers.get('X-Insert-After', '-1'))
-			except ValueError:
-				insert_after = -1
-
-			# Stream the body to a temp file in MIX_DIR, then move into place
-			# atomically so a partial write is never visible to the rescan.
-			MIX_DIR.mkdir(parents=True, exist_ok=True)
-			tmp_path = MIX_DIR / (filename + '.uploading')
-			try:
-				with open(tmp_path, 'wb') as out:
-					remaining = length
-					while remaining > 0:
-						chunk = self.rfile.read(min(64 * 1024, remaining))
-						if not chunk:
-							break
-						out.write(chunk)
-						remaining -= len(chunk)
-				if remaining != 0:
-					tmp_path.unlink(missing_ok=True)
-					self.send_response(400)
-					self.end_headers()
-					return
-
-				with tracks_lock:
-					import scan
-					# Dedup by canonical name: if a file with the canonical
-					# "Artist – Title.ext" name already lives in /mix, drop
-					# the upload and just reorder the existing entry to the
-					# requested slot so the client still gets the FLIP.
-					canonical = _canonical_name_for(tmp_path, filename)
-					if canonical and (MIX_DIR / canonical).exists():
-						tmp_path.unlink(missing_ok=True)
-						tracks = read_tracks()
-						moved = _move_track_to(tracks, canonical, insert_after)
-						if moved:
-							broadcast_tracks(tracks)
-						final_index = next((i for i, t in enumerate(tracks) if t.get('filename') == canonical), -1)
-						self._reply_json(200, {'filename': canonical, 'duplicate': True, 'moved': moved, 'final_index': final_index})
-						return
-
-					tmp_path.rename(MIX_DIR / filename)
-					placed_name = filename
-
-					tracks, _changed, renames = scan.rescan(silent=True)
-
-					# Find the canonical (post-canonicalize) filename for the
-					# upload by following the rename chain.
-					new_name = placed_name
-					for r in renames:
-						if r['from'] == new_name:
-							new_name = r['to']
-
-					_move_track_to(tracks, new_name, insert_after)
-					broadcast_tracks(tracks, renames=renames)
-					final_index = next((i for i, t in enumerate(tracks) if t.get('filename') == new_name), -1)
-
-				self._reply_json(200, {'filename': new_name, 'final_index': final_index})
-			except Exception as e:
-				tmp_path.unlink(missing_ok=True)
-				self.send_response(500)
-				self.end_headers()
-				try:
-					self.wfile.write(str(e).encode('utf-8'))
-				except Exception:
-					pass
-
-		def do_DELETE(self):
-			# Local-only: remove a track's audio file from /mix and prune
-			# tracks.json. Path is /tracks/<url-encoded-filename>.
-			prefix = '/tracks/'
-			if not self.path.startswith(prefix):
-				self.send_response(404)
-				self.end_headers()
-				return
-
-			filename = urllib.parse.unquote(self.path[len(prefix):])
-			target = (MIX_DIR / filename).resolve()
-			try:
-				target.relative_to(MIX_DIR.resolve())
-			except ValueError:
-				self.send_response(400)
-				self.end_headers()
-				return
-			if target == TRACKS_PATH.resolve() or target.name != filename:
-				self.send_response(400)
-				self.end_headers()
-				return
-			with tracks_lock:
-				try:
-					target.unlink()
-				except FileNotFoundError:
-					pass
-				except OSError as e:
-					self.send_response(500)
-					self.end_headers()
-					self.wfile.write(str(e).encode('utf-8'))
-					return
-				tracks = [t for t in read_tracks() if t.get('filename') != filename]
-				TRACKS_PATH.write_text(
-					json.dumps(tracks, indent='\t', ensure_ascii=False) + '\n',
-					encoding='utf-8',
-				)
-				broadcast_tracks(tracks)
-			self.send_response(204)
-			self.end_headers()
 
 	try:
 		with socketserver.ThreadingTCPServer(("", port), QuietHandler) as httpd:
@@ -480,9 +480,8 @@ def start_server():
 			network_url = f"http://{local_ip}:{port}"
 
 			print("=" * 60)
-			print("💿 mixapps")
-			print("=" * 60)
-			print(f"\nServer running on port {port}")
+			print("💿 mixapps · local test server")
+			print("=" * 60 + "\n")
 
 			# Print QR code for easy mobile access
 			print_qr_code(network_url)

@@ -390,6 +390,14 @@ body.reordering .playlist-item {
 	mask-position: center;
 }
 
+body::after {
+	content: '';
+	position: absolute;
+	width: 0;
+	height: 0;
+	mask-image: url('pause.svg');
+}
+
 #prev::before {
 	mask-image: url('prev.svg');
 	mask-position: 45% center;

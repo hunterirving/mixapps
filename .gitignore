@@ -23,5 +23,8 @@ mix/*
 manifest.json
 service-worker.js
 
+# Local HTTPS certs/keys minted by https_serve.py
+.https_certs/
+
 # Personal deployment script
 push.py

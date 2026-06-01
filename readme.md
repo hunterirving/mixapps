@@ -33,14 +33,16 @@ these days, we mostly point to things that we don't control.
 
 <hr><br>
 
-mixapps are immutable artifacts that can persist on-device, independent of platforms, contracts, and corporate whim.<br><br>
+mixapps are immutable artifacts. 
+
+they live on your devices, independent of platforms, contracts, and corporate whim. <br>
 
 once you install one, it's yours.<br><br>
 
 > [!IMPORTANT]
-> mixapps make it easy to host audio on the public internet, but publishing files you don't have the right to distribute may constitute copyright infringement.
+> publishing files you don't have the right to distribute may constitute copyright infringement. before uploading, ensure you have the right to distribute the files you include in `mix/`.
 >
-> before uploading, ensure you have the right to distribute the files you include in `mix/`. this can include your own original recordings, public-domain works, Creative Commons releases, or material you've licensed from rights holders.
+> alternatively, you can <A href="#local-network-installation">install mixapps over your own wifi</a> without ever pushing to a public host.
 
 ## quickstart
 1. **serve it**
@@ -57,9 +59,6 @@ once you install one, it's yours.<br><br>
 	- once you're happy with your mix, run `./build.py` and follow the interactive prompts to generate `manifest.json` and `service-worker.js`, which enable PWA installation and offline functionality.
 
 3. **ship it**
-
-	two options here:
-
 	- **public host:** when using media you have distribution rights for, you can upload the entire project directory to any static web host with HTTPS support (GitHub Pages, Neocities, AWS S3, etc.)
 
 		or...
@@ -89,7 +88,7 @@ add your own `custom.css`, `custom.js`, and/or `album_art.jpg` to `mix/` to cust
 
 PWA installation requires a secure (HTTPS) connection. the easiest way to get one is to upload your files to a public host, but publishing files this way is distribution, which means it's only appropriate for content you have the right to distribute.
 
-however, if you'd like to install mixapps without pushing to a public host, you can use `https_serve.py` to serve the necessary files over HTTPS on your local network.
+if you'd like to install mixapps without pushing to a public host, you can use `https_serve.py` to serve the necessary files over HTTPS on your local network.
 
 <h3>how it works</h3>
 

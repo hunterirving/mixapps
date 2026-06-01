@@ -39,11 +39,6 @@ they live on your devices, independent of platforms, contracts, and corporate wh
 
 once you install one, it's yours.<br><br>
 
-> [!IMPORTANT]
-> publishing files you don't have the right to distribute may constitute copyright infringement. before uploading, ensure you have the right to distribute the files you include in `mix/`.
->
-> alternatively, you can <A href="#local-network-installation">install mixapps over your own wifi</a> without ever pushing to a public host.
-
 ## quickstart
 1. **serve it**
 	- run `./serve.py` to start a development server. while the server is running, you can:
@@ -59,11 +54,12 @@ once you install one, it's yours.<br><br>
 	- once you're happy with your mix, run `./build.py` and follow the interactive prompts to generate `manifest.json` and `service-worker.js`, which enable PWA installation and offline functionality.
 
 3. **ship it**
-	- **public host:** when using media you have distribution rights for, you can upload the entire project directory to any static web host with HTTPS support (GitHub Pages, Neocities, AWS S3, etc.)
+	- **public host:** when using media you have distribution rights for, you can upload the entire project directory to any static web host with HTTPS support (GitHub Pages, Neocities, AWS S3, etc).<br>
+	**publishing files you don't have the right to distribute may constitute copyright infringement.**
 
 		or...
 
-	- **your own wifi:** install onto your own devices using a <a href="#local-network-installation">local HTTPS server</a>
+	- **your own wifi:** install onto your own devices using a <a href="#local-network-installation">local HTTPS server</a>. no public host needed, and nothing ever leaves your network.
 
 4. **save it**
 	- once your mixapp is hosted, anyone can install it by opening the URL and following their browser's PWA installation steps:

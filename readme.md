@@ -63,7 +63,7 @@ once you install one, it's yours.<br><br>
 
 		or...
 
-	- **your own wifi:** install onto your own devices using a local HTTPS server (see <a href="#local-network-installation">local network installation</a>)
+	- **your own wifi:** install onto your own devices using a <a href="#local-network-installation">local HTTPS server</a>
 
 4. **save it**
 	- once your mixapp is hosted, anyone can install it by opening the URL and following their browser's PWA installation steps:

@@ -54,12 +54,11 @@ once you install one, it's yours.<br><br>
 	- once you're happy with your mix, run `./build.py` and follow the interactive prompts to generate `manifest.json` and `service-worker.js`, which enable PWA installation and offline functionality.
 
 3. **ship it**
-	- **public host:** when using media you have distribution rights for, you can upload the entire project directory to any static web host with HTTPS support (GitHub Pages, Neocities, AWS S3, etc).<br>
+	- using a **public host:**
+		- when using media you have distribution rights for, you can upload the entire project directory to any static web host with HTTPS support (GitHub Pages, Neocities, AWS S3, etc).<br>
 	**publishing files you don't have the right to distribute may constitute copyright infringement.**
-
-		or...
-
-	- **your own wifi:** install onto your own devices using a <a href="#local-network-installation">local HTTPS server</a>. no public host needed, and nothing ever leaves your network.
+	- over **your own wifi:**
+		- install onto your own devices using a <a href="#local-network-installation">local HTTPS server</a>. no public host necessary, and nothing ever leaves your network.
 
 4. **save it**
 	- once your mixapp is hosted, anyone can install it by opening the URL and following their browser's PWA installation steps:
@@ -82,7 +81,7 @@ add your own `custom.css`, `custom.js`, and/or `album_art.jpg` to `mix/` to cust
 
 <br>
 
-PWA installation requires a secure (HTTPS) connection. the easiest way to get one is to upload your files to a public host, but publishing files this way is distribution, which means it's only appropriate for content you have the right to distribute.
+PWA installation requires a secure (HTTPS) connection. the easiest way to get one is to upload your files to a public host, but publishing files this way is only appropriate for content you have the right to distribute.
 
 if you'd like to install mixapps without pushing to a public host, you can use `https_serve.py` to serve the necessary files over HTTPS on your local network.
 
@@ -122,6 +121,8 @@ in practice the risk is small, because an attack needs **three** things to line 
 	a device that already trusts the CA from a previous run can skip this step.
 
 3. scan the second QR code to open your mixapp over HTTPS, then follow the <a href="https://hunterirving.github.io/web_workshop/pages/pwa">PWA installation instructions</a> for your device/OS to add it to your homescreen. after the initial installation and cache, mixapps work completely offline; they no longer need the network, server, or certificate.
+
+> **hint:** consider reserving a static IP for your computer in your router's DHCP settings. the cached certificate is tied to your LAN IP, so it breaks if that IP changes (delete `.https_certs/` to re-mint).
 
 <h3 id="cleaning-up">cleaning up</h3>
 

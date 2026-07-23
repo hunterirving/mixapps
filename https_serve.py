@@ -301,6 +301,30 @@ def start_ca_server(local_ip):
 	return httpd
 
 
+class TLSThreadingServer(socketserver.ThreadingTCPServer):
+	"""Threading server that negotiates TLS in the worker thread, so
+	handshakes run in parallel."""
+	daemon_threads = True
+	allow_reuse_address = True
+	# default backlog of 5 drops connections when a device precaches in bursts
+	request_queue_size = 128
+
+	def __init__(self, server_address, handler_cls, ssl_context):
+		self.ssl_context = ssl_context
+		super().__init__(server_address, handler_cls)
+
+	def process_request_thread(self, request, client_address):
+		try:
+			request.settimeout(20)  # cap how long a dead client's handshake lingers
+			request = self.ssl_context.wrap_socket(request, server_side=True)
+			request.settimeout(None)
+		except (ssl.SSLError, OSError):
+			# Untrusted CA, a probe, or a client that walked away.
+			self.shutdown_request(request)
+			return
+		super().process_request_thread(request, client_address)
+
+
 def serve_https(local_ip, base_path, ca_httpd=None):
 	"""Serve SCRIPT_DIR over HTTPS for PWA installation, mounted under
 	base_path so the installed app's start_url resolves. Runs until Ctrl+C,
@@ -327,7 +351,7 @@ def serve_https(local_ip, base_path, ca_httpd=None):
 		def handle(self):
 			try:
 				super().handle()
-			except (BrokenPipeError, ConnectionResetError):
+			except (BrokenPipeError, ConnectionResetError, ssl.SSLError):
 				pass
 
 		def translate_path(self, path):
@@ -341,6 +365,7 @@ def serve_https(local_ip, base_path, ca_httpd=None):
 			if base_path != "/" and self.path in ("/", "/index.html"):
 				self.send_response(302)
 				self.send_header("Location", base_path)
+				self.send_header("Content-Length", "0")
 				self.end_headers()
 				return
 			# super() is serve.TrackRequestHandler.do_GET, which handles
@@ -358,9 +383,7 @@ def serve_https(local_ip, base_path, ca_httpd=None):
 			ca_httpd.server_close()
 		sys.exit(1)
 
-	with socketserver.ThreadingTCPServer(("", port), QuietHandler) as httpd:
-		httpd.daemon_threads = True
-		httpd.socket = ctx.wrap_socket(httpd.socket, server_side=True)
+	with TLSThreadingServer(("", port), QuietHandler, ctx) as httpd:
 		https_url = f"https://{local_ip}:{port}{base_path}"
 
 		print("\n" + "=" * 59)

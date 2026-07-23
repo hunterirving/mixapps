@@ -222,6 +222,13 @@ def start_rescan_ticker(interval=1.0):
 
 
 class TrackRequestHandler(http.server.SimpleHTTPRequestHandler):
+	# keep-alive; every response below needs a Content-Length or must close
+	protocol_version = 'HTTP/1.1'
+	# don't let idle connections pin threads forever
+	timeout = 60
+	# Nagle would stall the body write behind the header write
+	disable_nagle_algorithm = True
+
 	def do_GET(self):
 		# Rescan /mix on every tracks.json fetch so the page always sees
 		# what's actually on disk (added via rip.py/buy.py or by hand).
@@ -240,7 +247,10 @@ class TrackRequestHandler(http.server.SimpleHTTPRequestHandler):
 		self.send_response(200)
 		self.send_header('Content-Type', 'text/event-stream')
 		self.send_header('Cache-Control', 'no-cache')
-		self.send_header('Connection', 'keep-alive')
+		# The stream has no Content-Length, so under HTTP/1.1 it has to be
+		# delimited by closing the socket. Sending this also flips
+		# close_connection, so the handler won't try to reuse the socket.
+		self.send_header('Connection', 'close')
 		self.send_header('X-Accel-Buffering', 'no')
 		self.end_headers()
 
@@ -271,6 +281,22 @@ class TrackRequestHandler(http.server.SimpleHTTPRequestHandler):
 			with sse_subscribers_lock:
 				sse_subscribers.discard(q)
 
+	def _reply_status(self, status, body=b''):
+		"""Short reply with a Content-Length. Errors also close the socket,
+		since an early return can leave an unread body in the buffer."""
+		if isinstance(body, str):
+			body = body.encode('utf-8')
+		self.send_response(status)
+		self.send_header('Content-Length', str(len(body)))
+		if status >= 400:
+			self.send_header('Connection', 'close')
+		self.end_headers()
+		if body:
+			try:
+				self.wfile.write(body)
+			except (BrokenPipeError, ConnectionResetError):
+				pass
+
 	def _reply_json(self, status, payload):
 		body = json.dumps(payload).encode('utf-8')
 		self.send_response(status)
@@ -288,8 +314,7 @@ class TrackRequestHandler(http.server.SimpleHTTPRequestHandler):
 	def do_POST(self):
 		# Local-only: receive a reordered tracks array and overwrite tracks.json
 		if self.path != '/tracks':
-			self.send_response(404)
-			self.end_headers()
+			self._reply_status(404)
 			return
 		length = int(self.headers.get('Content-Length', '0'))
 		payload = json.loads(self.rfile.read(length))
@@ -308,8 +333,7 @@ class TrackRequestHandler(http.server.SimpleHTTPRequestHandler):
 		# desired insertion index (X-Insert-After: -1 means prepend).
 		prefix = '/upload/'
 		if not self.path.startswith(prefix):
-			self.send_response(404)
-			self.end_headers()
+			self._reply_status(404)
 			return
 
 		raw_name = urllib.parse.unquote(self.path[len(prefix):])
@@ -317,14 +341,12 @@ class TrackRequestHandler(http.server.SimpleHTTPRequestHandler):
 		filename = Path(raw_name).name
 		ext = Path(filename).suffix.lower()
 		if not filename or ext not in SUPPORTED_UPLOAD_EXTENSIONS:
-			self.send_response(415)
-			self.end_headers()
+			self._reply_status(415)
 			return
 
 		length = int(self.headers.get('Content-Length', '0'))
 		if length <= 0 or length > MAX_UPLOAD_BYTES:
-			self.send_response(413)
-			self.end_headers()
+			self._reply_status(413)
 			return
 
 		try:
@@ -347,8 +369,7 @@ class TrackRequestHandler(http.server.SimpleHTTPRequestHandler):
 					remaining -= len(chunk)
 			if remaining != 0:
 				tmp_path.unlink(missing_ok=True)
-				self.send_response(400)
-				self.end_headers()
+				self._reply_status(400)
 				return
 
 			with tracks_lock:
@@ -387,20 +408,14 @@ class TrackRequestHandler(http.server.SimpleHTTPRequestHandler):
 			self._reply_json(200, {'filename': new_name, 'final_index': final_index})
 		except Exception as e:
 			tmp_path.unlink(missing_ok=True)
-			self.send_response(500)
-			self.end_headers()
-			try:
-				self.wfile.write(str(e).encode('utf-8'))
-			except Exception:
-				pass
+			self._reply_status(500, str(e))
 
 	def do_DELETE(self):
 		# Local-only: remove a track's audio file from /mix and prune
 		# tracks.json. Path is /tracks/<url-encoded-filename>.
 		prefix = '/tracks/'
 		if not self.path.startswith(prefix):
-			self.send_response(404)
-			self.end_headers()
+			self._reply_status(404)
 			return
 
 		filename = urllib.parse.unquote(self.path[len(prefix):])
@@ -408,12 +423,10 @@ class TrackRequestHandler(http.server.SimpleHTTPRequestHandler):
 		try:
 			target.relative_to(MIX_DIR.resolve())
 		except ValueError:
-			self.send_response(400)
-			self.end_headers()
+			self._reply_status(400)
 			return
 		if target == TRACKS_PATH.resolve() or target.name != filename:
-			self.send_response(400)
-			self.end_headers()
+			self._reply_status(400)
 			return
 		with tracks_lock:
 			try:
@@ -421,9 +434,7 @@ class TrackRequestHandler(http.server.SimpleHTTPRequestHandler):
 			except FileNotFoundError:
 				pass
 			except OSError as e:
-				self.send_response(500)
-				self.end_headers()
-				self.wfile.write(str(e).encode('utf-8'))
+				self._reply_status(500, str(e))
 				return
 			tracks = [t for t in read_tracks() if t.get('filename') != filename]
 			TRACKS_PATH.write_text(
@@ -473,9 +484,13 @@ def start_server():
 				pass
 
 
+	class ThreadedServer(socketserver.ThreadingTCPServer):
+		daemon_threads = True
+		# default backlog of 5 drops connections when a browser opens several at once
+		request_queue_size = 128
+
 	try:
-		with socketserver.ThreadingTCPServer(("", port), QuietHandler) as httpd:
-			httpd.daemon_threads = True
+		with ThreadedServer(("", port), QuietHandler) as httpd:
 			local_url = f"http://localhost:{port}"
 			network_url = f"http://{local_ip}:{port}"
 

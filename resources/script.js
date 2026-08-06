@@ -275,6 +275,7 @@ audio.addEventListener('pause', () => {
 	isPlaying = false;
 	updatePlayPauseButton();
 	stopProgressBar();
+	updateProgressBar();
 	pauseMarquee();
 });
 

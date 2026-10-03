@@ -16,9 +16,6 @@ function attachReorderHandlers(item, index) {
 			e.preventDefault();
 			e.stopPropagation();
 			item._suppressClick = true;
-			const t = tracks[index];
-			if (!t) return;
-			if (!confirm(`Delete ${t.artist} – ${t.title}?`)) return;
 			deleteTrack(index);
 			return;
 		}

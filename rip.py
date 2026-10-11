@@ -1,7 +1,16 @@
 #!/usr/bin/env python3
 """
-Rips audio CDs to MP3 files in /mix directory
-Uses system tools: ffmpeg/ffprobe (no Python dependencies needed)
+Rips audio CDs to FLAC files in /mix directory
+(CDs that contain MP3 files are copied as-is)
+Looks up artist, album, and track titles on MusicBrainz
+Uses ffmpeg, plus discid and mutagen in the shared venv
+
+Usage: ./rip.py [track_number]
+  ./rip.py      rips the whole disc
+  ./rip.py 3    rips only track 3
+
+If /mix holds only tracks from this CD, ripping the whole disc also
+downloads its cover art to mix/album_art.jpg and runs build.py
 """
 
 import os
@@ -24,6 +33,7 @@ import platform
 
 SCRIPT_DIR = Path(__file__).parent.absolute()
 MIX_DIR = SCRIPT_DIR / "mix"
+USER_AGENT = 'mixapps/1.0 ( https://github.com/hunterirving/mixapps )'
 
 
 def check_ffmpeg():
@@ -39,7 +49,7 @@ def install_ffmpeg():
 	"""Attempt to install ffmpeg based on the platform"""
 	system = platform.system()
 
-	print("\nffmpeg is required to convert audio files to MP3.")
+	print("\nffmpeg is required to convert audio files to FLAC.")
 	print("Would you like to install it now? (requires admin/sudo privileges)")
 	response = input("Install ffmpeg? (y/n): ").lower().strip()
 
@@ -160,7 +170,8 @@ def install_libdiscid():
 
 def lookup_musicbrainz():
 	"""Compute disc ID from the default optical device and query MusicBrainz.
-	Returns (artist, album, {track_num: title}) or None on any failure."""
+	Returns (release_id, release_group_id, artist, album, {track_num: title})
+	or None on any failure."""
 	try:
 		import discid
 	except ImportError:
@@ -173,9 +184,9 @@ def lookup_musicbrainz():
 		print(f"  Could not read disc ID: {e}")
 		return None
 
-	url = f"https://musicbrainz.org/ws/2/discid/{disc.id}?inc=recordings+artist-credits&fmt=json"
+	url = f"https://musicbrainz.org/ws/2/discid/{disc.id}?inc=recordings+artist-credits+release-groups&fmt=json"
 	req = urllib.request.Request(url, headers={
-		'User-Agent': 'mixapps/1.0 ( https://github.com/hunterirving/mixapps )',
+		'User-Agent': USER_AGENT,
 		'Accept': 'application/json',
 	})
 
@@ -212,7 +223,71 @@ def lookup_musicbrainz():
 			except (TypeError, ValueError):
 				continue
 
-	return artist, album, titles
+	release_group_id = release.get('release-group', {}).get('id', '')
+	return release.get('id', ''), release_group_id, artist, album, titles
+
+
+def fetch_front_cover(entity, mbid):
+	"""Return the full-resolution front cover of a MusicBrainz release or
+	release group from the Cover Art Archive, or None if it has none"""
+	url = f"https://coverartarchive.org/{entity}/{mbid}/front"
+	req = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
+	try:
+		with urllib.request.urlopen(req, timeout=60) as resp:
+			return resp.read()
+	except urllib.error.HTTPError as e:
+		if e.code == 404:
+			return None
+		raise
+
+
+def download_album_art(release_id, release_group_id):
+	"""Save the release's front cover to mix/album_art.jpg, falling back to the
+	release group's cover, converting it to JPEG with ffmpeg if needed"""
+	try:
+		image = fetch_front_cover('release', release_id)
+		if image is None and release_group_id:
+			image = fetch_front_cover('release-group', release_group_id)
+	except urllib.error.HTTPError as e:
+		print(f"  Album art download failed: HTTP {e.code}")
+		return
+	except (urllib.error.URLError, TimeoutError) as e:
+		print(f"  Album art download failed: {e}")
+		return
+
+	if image is None:
+		print("  No album art found in the Cover Art Archive.")
+		return
+
+	album_art = MIX_DIR / "album_art.jpg"
+	if image.startswith(b'\xff\xd8\xff'):
+		album_art.write_bytes(image)
+	else:
+		download = MIX_DIR / "album_art.download"
+		download.write_bytes(image)
+		try:
+			result = subprocess.run(['ffmpeg', '-loglevel', 'error', '-y', '-i', str(download),
+			                         '-frames:v', '1', '-q:v', '2', str(album_art)],
+			                        capture_output=True, text=True)
+		finally:
+			download.unlink(missing_ok=True)
+		if result.returncode != 0:
+			album_art.unlink(missing_ok=True)
+			err_tail = "\n".join(result.stderr.strip().splitlines()[-5:])
+			print(f"  Could not convert album art to JPEG:\n{err_tail}")
+			return
+	print("✓ Saved album art to mix/album_art.jpg")
+
+
+def mix_tracks():
+	"""Names of the audio files currently in /mix"""
+	return {f.name for f in MIX_DIR.iterdir() if f.suffix.lower() in scan.SUPPORTED_EXTENSIONS}
+
+
+def build_mixapp(album):
+	"""Run build.py, answering its prompts with the album name and the default path"""
+	print(f"\nBuilding mixapp \"{album}\"...")
+	subprocess.run([sys.executable, str(SCRIPT_DIR / "build.py")], input=f"{album}\n\n", text=True)
 
 
 def find_cd_mount():
@@ -286,22 +361,6 @@ def get_audio_files(mount_point):
 	return sorted(audio_files, key=natural_sort_key)
 
 
-def get_audio_duration(input_file):
-	"""Get the duration of an audio file in seconds using ffprobe"""
-	try:
-		cmd = [
-			'ffprobe',
-			'-v', 'error',
-			'-show_entries', 'format=duration',
-			'-of', 'default=noprint_wrappers=1:nokey=1',
-			str(input_file)
-		]
-		result = subprocess.check_output(cmd, stderr=subprocess.DEVNULL)
-		return float(result.decode().strip())
-	except (subprocess.CalledProcessError, ValueError):
-		return None
-
-
 def print_progress_bar(progress, disc_progress=None, time_str="", width=40, show_disc=True):
 	"""Print a progress bar with width-stable percent + disc progress + remaining time"""
 	filled = int(width * progress)
@@ -318,99 +377,61 @@ def print_progress_bar(progress, disc_progress=None, time_str="", width=40, show
 	print(output, end='', flush=True)
 
 
-def convert_to_mp3(input_file, output_file, track_num, title, artist, album,
-                   duration, total_size, processed_size, queued_audio_seconds,
-                   show_disc=True):
-	"""Convert an audio file to MP3 using ffmpeg with progress bar and ETA."""
-	tmp_path = output_file.with_name(output_file.name + '.ripping')
-	try:
-		cmd = [
-			'ffmpeg', '-i', str(input_file),
-			'-codec:a', 'libmp3lame', '-qscale:a', '2',
-			'-f', 'mp3',
-			'-metadata', f'track={track_num}',
-			'-metadata', f'title={title}',
-			'-metadata', f'artist={artist}',
-		]
-		if album:
-			cmd += ['-metadata', f'album={album}']
-		cmd += ['-progress', 'pipe:1', '-y', str(tmp_path)]
-
-		process = subprocess.Popen(cmd, stdout=subprocess.PIPE,
-		                          stderr=subprocess.PIPE, universal_newlines=True)
-		last_state = None
-		current_time = 0.0
-		speed = None
-
-		for line in process.stdout:
-			line = line.strip()
-			if line.startswith('out_time_ms='):
-				try:
-					current_time = int(line.split('=')[1]) / 1_000_000
-				except (ValueError, IndexError):
-					continue
-			elif line.startswith('speed='):
-				val = line.split('=', 1)[1].rstrip('x').strip()
-				try:
-					speed = float(val) if val and val != 'N/A' else None
-				except ValueError:
-					speed = None
-			else:
-				continue
-
-			if not (duration and duration > 0):
-				continue
-
-			progress = min(current_time / duration, 1.0)
-			processed_bytes = input_file.stat().st_size * progress
-			total_processed = processed_size + processed_bytes
-			disc_progress = min(total_processed / total_size, 1.0) if total_size > 0 else 0
-
-			# remaining audio seconds = rest of this track + everything after it
-			audio_remaining = max(duration - current_time, 0) + queued_audio_seconds
-			if speed and speed > 0:
-				eta_sec = audio_remaining / speed
-				time_str = f"{int(eta_sec / 60):>2d}m {int(eta_sec % 60):>2d}s"
-			else:
-				time_str = ""
-
+def copy_from_cd(input_file, local_copy, total_size, processed_size, queued_size,
+                 show_disc=True):
+	"""Copy a track off the CD in large sequential reads with progress bar and ETA."""
+	size = input_file.stat().st_size
+	copied = 0
+	start_time = time.time()
+	last_state = None
+	with open(input_file, 'rb') as src, open(local_copy, 'wb') as dst:
+		while chunk := src.read(1 << 20):
+			dst.write(chunk)
+			copied += len(chunk)
+			progress = copied / size
+			disc_progress = min((processed_size + copied) / total_size, 1.0) if total_size > 0 else 0
+			rate = copied / (time.time() - start_time)
+			eta_sec = (size - copied + queued_size) / rate
+			time_str = f"{int(eta_sec / 60):>2d}m {int(eta_sec % 60):>2d}s"
 			state = (int(progress * 100), int(disc_progress * 100), time_str)
 			if state != last_state:
 				print_progress_bar(progress, disc_progress, time_str, show_disc=show_disc)
 				last_state = state
 
-		process.wait()
-		if process.returncode == 0:
-			os.replace(tmp_path, output_file)
-			print_progress_bar(1.0)
-			print()
-			return True
-		else:
-			stderr_output = process.stderr.read() if process.stderr else ""
-			tmp_path.unlink(missing_ok=True)
-			print()
-			if stderr_output:
-				# show the last few lines of ffmpeg's error output
-				err_tail = "\n".join(stderr_output.strip().splitlines()[-5:])
-				print(f"     ffmpeg error:\n{err_tail}")
-			return False
 
+def convert_to_flac(input_file, output_file, track_num, title, artist, album):
+	"""Convert a local audio file to lossless FLAC using ffmpeg"""
+	tmp_path = output_file.with_name(output_file.name + '.ripping')
+	cmd = [
+		'ffmpeg', '-loglevel', 'error', '-i', str(input_file),
+		'-codec:a', 'flac',
+		'-f', 'flac',
+		'-metadata', f'track={track_num}',
+		'-metadata', f'title={title}',
+		'-metadata', f'artist={artist}',
+	]
+	if album:
+		cmd += ['-metadata', f'album={album}']
+	cmd += ['-y', str(tmp_path)]
+
+	try:
+		result = subprocess.run(cmd, capture_output=True, text=True)
 	except KeyboardInterrupt:
-		# kill ffmpeg, drop the half-written tmp, and let the caller exit cleanly
-		try:
-			process.terminate()
-			process.wait(timeout=2)
-		except (NameError, subprocess.TimeoutExpired):
-			try:
-				process.kill()
-			except (NameError, ProcessLookupError):
-				pass
 		tmp_path.unlink(missing_ok=True)
 		raise
 	except Exception as e:
 		tmp_path.unlink(missing_ok=True)
-		print(f"\n     Error: {e}")
+		print(f"     Error: {e}")
 		return False
+
+	if result.returncode == 0:
+		os.replace(tmp_path, output_file)
+		return True
+	tmp_path.unlink(missing_ok=True)
+	if result.stderr:
+		err_tail = "\n".join(result.stderr.strip().splitlines()[-5:])
+		print(f"     ffmpeg error:\n{err_tail}")
+	return False
 
 
 def sanitize_filename(filename):
@@ -424,10 +445,15 @@ def sanitize_filename(filename):
 	return name
 
 
-def canonical_mp3_name(artist, title):
-	"""Match scan.py / serve.py's canonical 'Artist – Title.mp3' form so we
+def output_extension(audio_file):
+	"""MP3s on the CD are copied as-is; anything else is converted to FLAC"""
+	return '.mp3' if audio_file.suffix.lower() == '.mp3' else '.flac'
+
+
+def canonical_name(artist, title, ext):
+	"""Match scan.py / serve.py's canonical 'Artist – Title.ext' form so we
 	can dedup against tracks already in /mix."""
-	return f"{scan._sanitize_filename(artist)} – {scan._sanitize_filename(title)}.mp3"
+	return f"{scan._sanitize_filename(artist)} – {scan._sanitize_filename(title)}{ext}"
 
 
 def cleanup_ripping_files():
@@ -445,7 +471,7 @@ def cleanup_ripping_files():
 
 
 def rip_cd(only_track=None):
-	"""Main function to rip CD to MP3 files.
+	"""Main function to rip CD to FLAC files.
 	If only_track is set, only that track number is ripped."""
 	print("=" * 60)
 	print("💿 mixapps - CD Ripper")
@@ -495,9 +521,9 @@ def rip_cd(only_track=None):
 		if only_track < 1 or only_track > len(audio_files):
 			print(f"✗ Track {only_track} is out of range (CD has {len(audio_files)} tracks).")
 			sys.exit(1)
-		print(f"\nWill rip only track {only_track} to MP3 format.")
+		print(f"\nWill rip only track {only_track} to FLAC format.")
 	else:
-		print(f"\nThis will copy and convert {len(audio_files)} tracks to MP3 format.")
+		print(f"\nThis will copy and convert {len(audio_files)} tracks to FLAC format.")
 	print(f"Output directory: {MIX_DIR}")
 
 	# Try MusicBrainz lookup for artist/album/track titles
@@ -506,13 +532,15 @@ def rip_cd(only_track=None):
 		install_libdiscid()
 
 	mb_titles = {}
+	release_id = ""
+	release_group_id = ""
 	album = ""
 	artist = ""
 	if check_libdiscid():
 		print("\nLooking up disc on MusicBrainz...")
 		result = lookup_musicbrainz()
 		if result:
-			artist, album, mb_titles = result
+			release_id, release_group_id, artist, album, mb_titles = result
 			print(f"✓ Found: {artist} — {album}")
 		else:
 			print("  No match found.")
@@ -528,10 +556,10 @@ def rip_cd(only_track=None):
 
 	# Resolve titles once and partition into skip-vs-rip.
 	import re
-	planned = []  # list of (idx, audio_file, cleaned_name, will_rip, duration)
+	planned = []  # list of (idx, audio_file, cleaned_name, will_rip, size)
 	skipped_count = 0
 	skipped_size = 0
-	print("\nReading track durations...")
+	cd_tracks = set()
 	for idx, audio_file in enumerate(audio_files, start=1):
 		if only_track is not None and idx != only_track:
 			continue
@@ -541,23 +569,26 @@ def rip_cd(only_track=None):
 		if idx in mb_titles and mb_titles[idx]:
 			cleaned_name = sanitize_filename(mb_titles[idx])
 
-		duration = get_audio_duration(audio_file) or 0
+		size = audio_file.stat().st_size
 
-		canonical = canonical_mp3_name(artist, cleaned_name)
+		canonical = canonical_name(artist, cleaned_name, output_extension(audio_file))
+		cd_tracks.add(canonical)
 		if (MIX_DIR / canonical).exists():
 			print(f"Skipping track {idx} of {len(audio_files)}: {cleaned_name} (already in /mix)")
 			skipped_count += 1
-			skipped_size += audio_file.stat().st_size
-			planned.append((idx, audio_file, cleaned_name, False, duration))
+			skipped_size += size
+			planned.append((idx, audio_file, cleaned_name, False, size))
 		else:
-			planned.append((idx, audio_file, cleaned_name, True, duration))
+			planned.append((idx, audio_file, cleaned_name, True, size))
+
+	only_this_cd = mix_tracks() <= cd_tracks
 
 	queued_after = []
 	tail = 0.0
 	for entry in reversed(planned):
 		queued_after.append(tail)
 		if entry[3]:  # will_rip
-			tail += entry[4]  # duration
+			tail += entry[4]  # size
 	queued_after.reverse()
 
 	success_count = 0
@@ -570,16 +601,17 @@ def rip_cd(only_track=None):
 	show_disc = rip_count > 1
 
 	try:
-		for entry_idx, (idx, audio_file, cleaned_name, will_rip, duration) in enumerate(planned):
+		for entry_idx, (idx, audio_file, cleaned_name, will_rip, size) in enumerate(planned):
 			if not will_rip:
 				continue
 			padded_idx = str(idx).zfill(padding_width)
-			output_file = MIX_DIR / f"{padded_idx} {cleaned_name}.mp3"
+			ext = output_extension(audio_file)
+			output_file = MIX_DIR / f"{padded_idx} {cleaned_name}{ext}"
 
 			# Handle duplicate filenames
 			counter = 1
 			while output_file.exists():
-				output_file = MIX_DIR / f"{padded_idx} {cleaned_name}_{counter}.mp3"
+				output_file = MIX_DIR / f"{padded_idx} {cleaned_name}_{counter}{ext}"
 				counter += 1
 
 			print(f"Ripping track {idx} of {len(audio_files)}: {cleaned_name}")
@@ -601,9 +633,19 @@ def rip_cd(only_track=None):
 					tmp_path.unlink(missing_ok=True)
 					print(f"✗ Error: {e}")
 			else:
-				if convert_to_mp3(audio_file, output_file, idx, cleaned_name, artist, album,
-				                 duration, total_size, processed_size, queued_after[entry_idx],
-				                 show_disc=show_disc):
+				local_copy = MIX_DIR / f"{audio_file.name}.ripping"
+				try:
+					copy_from_cd(audio_file, local_copy, total_size, processed_size,
+					             queued_after[entry_idx], show_disc=show_disc)
+					print_progress_bar(1.0)
+					print()
+					converted = convert_to_flac(local_copy, output_file, idx, cleaned_name, artist, album)
+				except Exception as e:
+					print(f"\n     Error: {e}")
+					converted = False
+				finally:
+					local_copy.unlink(missing_ok=True)
+				if converted:
 					success_count += 1
 					ripped_this_track = True
 					print(f"✓ Ripped: {cleaned_name}")
@@ -636,6 +678,14 @@ def rip_cd(only_track=None):
 
 	if success_count > 0:
 		print(f"\nSaved to: {MIX_DIR}")
+
+	whole_cd_in_mix = only_track is None and success_count + skipped_count == planned_total
+	if only_this_cd and whole_cd_in_mix and album:
+		if release_id and not (MIX_DIR / "album_art.jpg").exists():
+			download_album_art(release_id, release_group_id)
+		build_mixapp(album)
+		print("\nRun https_serve.py to install your mixapp.")
+	elif success_count > 0:
 		print("\nRun serve.py to test your mixapp.")
 
 	if success_count > 0 or skipped_count == planned_total:

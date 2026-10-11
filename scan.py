@@ -74,11 +74,12 @@ def bootstrap(script_path, packages=("mutagen",), sentinel="--in-venv"):
 		sys.argv.remove(sentinel)
 		return
 	python_path = setup_venv(packages)
-	try:
-		result = subprocess.run([str(python_path), script_path, sentinel, *sys.argv[1:]])
-		sys.exit(result.returncode)
-	except KeyboardInterrupt:
-		sys.exit(130)
+	process = subprocess.Popen([str(python_path), script_path, sentinel, *sys.argv[1:]])
+	while True:
+		try:
+			sys.exit(process.wait())
+		except KeyboardInterrupt:
+			continue
 
 
 def run_in_venv():

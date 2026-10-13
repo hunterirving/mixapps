@@ -4,6 +4,7 @@ Creates manifest.json and service-worker.js
 (PWA requirements) based on the contents of tracks.json
 """
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -121,10 +122,19 @@ def build_pwa(app_name=None, base_path=None):
 	album_art_path = "mix/album_art.jpg" if custom_album_art.exists() else "resources/album_art.jpg"
 	# append a content hash so the URL changes when the image changes
 	if album_art_file.exists():
-		import hashlib
 		art_hash = hashlib.md5(album_art_file.read_bytes()).hexdigest()[:8]
 		album_art_path = f"{album_art_path}?v={art_hash}"
 	print(f"  Album art: {album_art_path}")
+
+	# mix/icon.png overrides the default
+	custom_icon = SCRIPT_DIR / "mix" / "icon.png"
+	icon_file = custom_icon if custom_icon.exists() else SCRIPT_DIR / "resources" / "icon.png"
+	icon_path = "mix/icon.png" if custom_icon.exists() else "resources/icon.png"
+	# append a content hash so the URL changes when the image changes
+	if icon_file.exists():
+		icon_hash = hashlib.md5(icon_file.read_bytes()).hexdigest()[:8]
+		icon_path = f"{icon_path}?v={icon_hash}"
+	print(f"  Icon: {icon_path}")
 
 	# Generate manifest.json
 	manifest = {
@@ -141,7 +151,7 @@ def build_pwa(app_name=None, base_path=None):
 		"album_art": album_art_path,  # Custom field for script.js to use
 		"icons": [
 			{
-				"src": f"{base_path}resources/icon.png",
+				"src": f"{base_path}{icon_path}",
 				"sizes": "640x640",
 				"type": "image/png",
 				"purpose": "any maskable"
@@ -161,7 +171,7 @@ def build_pwa(app_name=None, base_path=None):
 		"resources/styles.css",
 		"resources/script.js",
 		"mix/tracks.json",
-		"resources/icon.png",
+		icon_path,
 		album_art_path,
 		"resources/play.svg",
 		"resources/pause.svg",
@@ -172,8 +182,8 @@ def build_pwa(app_name=None, base_path=None):
 	]
 
 	AUDIO_EXTS = {".mp3", ".m4a", ".ogg", ".flac", ".wav"}
-	# album_art.jpg added explicitly above with a hash; skip to avoid a bare dupe
-	SKIP_NAMES = {"tracks.json", "readme.md", "album_art.jpg"}
+	# album_art.jpg and icon.png added explicitly above with a hash; skip to avoid a bare dupe
+	SKIP_NAMES = {"tracks.json", "readme.md", "album_art.jpg", "icon.png"}
 	for path in sorted((SCRIPT_DIR / "mix").iterdir()):
 		if not path.is_file():
 			continue

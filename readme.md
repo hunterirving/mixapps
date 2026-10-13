@@ -72,7 +72,7 @@ once you install one, it's yours.<br><br>
 	(pictured: integration with iOS lockscreen controls)
 
 ## customization
-add your own `custom.css`, `custom.js`, and/or `album_art.jpg` to `mix/` to customize your mixapp's appearance and behavior.
+add `custom.css`, `custom.js`, `album_art.jpg`, and/or `icon.png` to `mix/` to customize your mixapp's appearance and behavior.
 
 ## local network installation
 

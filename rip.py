@@ -10,7 +10,8 @@ Usage: ./rip.py [track_number]
   ./rip.py 3    rips only track 3
 
 If /mix holds only tracks from this CD, ripping the whole disc also
-downloads its cover art to mix/album_art.jpg and runs build.py
+downloads its cover art to mix/album_art.jpg, scales it to mix/icon.png
+and runs build.py
 """
 
 import os
@@ -277,6 +278,20 @@ def download_album_art(release_id, release_group_id):
 			print(f"  Could not convert album art to JPEG:\n{err_tail}")
 			return
 	print("✓ Saved album art to mix/album_art.jpg")
+
+
+def make_icon():
+	"""Scale mix/album_art.jpg to a 1000x1000 mix/icon.png using ffmpeg"""
+	icon = MIX_DIR / "icon.png"
+	result = subprocess.run(['ffmpeg', '-loglevel', 'error', '-y', '-i', str(MIX_DIR / "album_art.jpg"),
+	                         '-vf', 'scale=1000:1000', '-frames:v', '1', str(icon)],
+	                        capture_output=True, text=True)
+	if result.returncode != 0:
+		icon.unlink(missing_ok=True)
+		err_tail = "\n".join(result.stderr.strip().splitlines()[-5:])
+		print(f"  Could not create icon:\n{err_tail}")
+		return
+	print("✓ Saved icon to mix/icon.png")
 
 
 def mix_tracks():
@@ -683,6 +698,8 @@ def rip_cd(only_track=None):
 	if only_this_cd and whole_cd_in_mix and album:
 		if release_id and not (MIX_DIR / "album_art.jpg").exists():
 			download_album_art(release_id, release_group_id)
+		if (MIX_DIR / "album_art.jpg").exists() and not (MIX_DIR / "icon.png").exists():
+			make_icon()
 		build_mixapp(album)
 		print("\nRun https_serve.py to install your mixapp.")
 	elif success_count > 0:

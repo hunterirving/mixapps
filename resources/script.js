@@ -595,6 +595,14 @@ window.addEventListener('resize', () => {
 	setupMarquee({ preserveOffset: true });
 });
 
+document.fonts.addEventListener('loadingdone', () => {
+	if (!marqueeOriginalText) return;
+	const textSpan = currentTrackDisplay.querySelector('span');
+	if (!textSpan) return;
+	textSpan.textContent = marqueeOriginalText;
+	setupMarquee({ preserveOffset: true });
+});
+
 function togglePlayPause() {
 	if (!playerReady) return;
 	if (isPlaying) {

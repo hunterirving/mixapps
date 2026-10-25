@@ -221,10 +221,19 @@ def ensure_ca_installed():
 
 
 def ensure_leaf_cert(local_ip):
-	"""Mint a cert/key for this machine's LAN IP (and localhost) if missing."""
+	"""Mint a cert/key for this machine's LAN IP (and localhost) if missing
+	or minted for a different IP."""
 	CERT_DIR.mkdir(parents=True, exist_ok=True)
 	if CERT_FILE.exists() and KEY_FILE.exists():
-		return
+		try:
+			sans = ssl._ssl._test_decode_cert(str(CERT_FILE)).get("subjectAltName", ())
+		except (AttributeError, OSError):
+			print("Couldn't read the existing certificate.")
+		else:
+			old_ips = [v for k, v in sans if k == "IP Address" and v != "127.0.0.1"]
+			if local_ip in old_ips:
+				return
+			print(f"This machine's LAN IP changed ({', '.join(old_ips)} → {local_ip}).")
 	print(f"Minting certificate for {local_ip}...")
 	subprocess.check_call([
 		"mkcert",

@@ -122,8 +122,6 @@ in practice the risk is small, because an attack needs **three** things to line 
 
 3. scan the second QR code to open your mixapp over HTTPS, then follow the <a href="https://hunterirving.github.io/web_workshop/pages/pwa">PWA installation instructions</a> for your device/OS to add it to your homescreen. after the initial installation and cache, mixapps work completely offline; they no longer need the network, server, or certificate.
 
-> **hint:** consider reserving a static IP for your computer in your router's DHCP settings. the cached certificate is tied to your LAN IP, so it breaks if that IP changes (delete `.https_certs/` to re-mint).
-
 <h3 id="cleaning-up">cleaning up</h3>
 
 - **on the installing device (recommended):** it's good practice to untrust the CA once you're done installing, and only re-enable it when you want to install another mixapp.

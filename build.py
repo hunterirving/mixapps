@@ -194,6 +194,7 @@ def build_pwa(app_name=None, base_path=None):
 		static_files.append(f"mix/{path.name}")
 
 	static_files_js = json.dumps(static_files)
+	audio_pattern = "|".join(sorted(ext[1:] for ext in AUDIO_EXTS))
 
 	# Generate service-worker.js
 	service_worker_content = f'''// Auto-generated service worker for {app_name} PWA
@@ -209,6 +210,7 @@ const basePath = getBasePath();
 
 // Static files to cache on install
 const STATIC_FILES = {static_files_js};
+const AUDIO_FILE = /\\.({audio_pattern})$/i;
 
 // Install event - cache static resources only if not already cached.
 // This makes installs immutable: once a file is in the cache, redeploys
@@ -301,6 +303,10 @@ self.addEventListener('fetch', (event) => {{
 					.then((networkResponse) => {{
 						// Check if valid response
 						if (!networkResponse || networkResponse.status !== 200 || networkResponse.type === 'error') {{
+							return networkResponse;
+						}}
+
+						if (AUDIO_FILE.test(new URL(event.request.url).pathname)) {{
 							return networkResponse;
 						}}
 

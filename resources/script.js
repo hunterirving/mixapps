@@ -173,7 +173,8 @@ fetch('manifest.json')
 				})
 				.catch(loadTracksFromCache);
 
-		return Promise.all([detectOptional, loadTracks]);
+		const loadFont = document.fonts.load('1em "Basteleur Moonlight"').catch(() => {});
+		return Promise.all([detectOptional, loadFont, loadTracks]);
 	})
 	.then((results) => {
 		const data = results[results.length - 1];
@@ -558,8 +559,8 @@ function marqueeStep(now) {
 }
 
 function pauseMarquee() {
-	if (!marqueeAnimating) return;
 	marqueePaused = true;
+	if (!marqueeAnimating) return;
 
 	if (marqueeRafId) {
 		cancelAnimationFrame(marqueeRafId);
@@ -572,12 +573,12 @@ function pauseMarquee() {
 }
 
 function resumeMarquee() {
-	if (!marqueeAnimating) return;
 	marqueePaused = false;
+	if (!marqueeAnimating) return;
 	startMarqueeMotion();
 }
 
-window.addEventListener('resize', () => {
+new ResizeObserver(() => {
 	if (!marqueeOriginalText) return;
 	const textSpan = currentTrackDisplay.querySelector('span');
 	if (!textSpan) return;
@@ -593,15 +594,7 @@ window.addEventListener('resize', () => {
 	}
 
 	setupMarquee({ preserveOffset: true });
-});
-
-document.fonts.addEventListener('loadingdone', () => {
-	if (!marqueeOriginalText) return;
-	const textSpan = currentTrackDisplay.querySelector('span');
-	if (!textSpan) return;
-	textSpan.textContent = marqueeOriginalText;
-	setupMarquee({ preserveOffset: true });
-});
+}).observe(currentTrackDisplay);
 
 function togglePlayPause() {
 	if (!playerReady) return;

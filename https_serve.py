@@ -39,7 +39,7 @@ import serve  # reuse serve.py's track-management backend (TrackRequestHandler, 
 CERT_HTTP_PORT = 8001  # preferred; falls back to the next free port
 HTTPS_PORT = 8443      # preferred; falls back to the next free port
 SCRIPT_DIR = Path(__file__).parent.absolute()
-CERT_DIR = SCRIPT_DIR / ".https_certs"
+CERT_DIR = Path.home() / ".mixapps" / "https_certs"
 CERT_FILE = CERT_DIR / "cert.pem"
 KEY_FILE = CERT_DIR / "key.pem"
 MANIFEST_FILE = SCRIPT_DIR / "manifest.json"

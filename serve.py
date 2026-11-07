@@ -23,6 +23,9 @@ VENV_DIR = SCRIPT_DIR / "venv"
 MIX_DIR = SCRIPT_DIR / "mix"
 TRACKS_PATH = MIX_DIR / "tracks.json"
 
+PUBLIC_FILES = {"index.html", "manifest.json", "service-worker.js"}
+PUBLIC_DIRS = {"resources", "mix"}
+
 SUPPORTED_UPLOAD_EXTENSIONS = ('.mp3', '.m4a', '.ogg', '.flac', '.wav')
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024  # 200 MB per request
 
@@ -241,6 +244,27 @@ class TrackRequestHandler(http.server.SimpleHTTPRequestHandler):
 			return self._serve_sse()
 
 		return super().do_GET()
+
+	def _is_public(self, fs_path):
+		parts = Path(fs_path).relative_to(self.directory).parts
+		if not parts:
+			return True
+		if any(part.startswith('.') for part in parts):
+			return False
+		if len(parts) == 1:
+			return parts[0] in PUBLIC_FILES
+		name = parts[-1].lower()
+		return parts[0] in PUBLIC_DIRS and name != 'readme.md' and not name.endswith('.uploading')
+
+	def send_head(self):
+		if not self._is_public(self.translate_path(self.path)):
+			self.send_error(404)
+			return None
+		return super().send_head()
+
+	def list_directory(self, path):
+		self.send_error(404)
+		return None
 
 	def _serve_sse(self):
 		"""Server-Sent Events stream of tracks.json changes."""

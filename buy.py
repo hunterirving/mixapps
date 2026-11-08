@@ -13,7 +13,7 @@ import os
 
 # Hop into the shared venv (managed by scan.py) before doing anything else,
 # so scan.rescan() has mutagen available when we call it after a purchase.
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 import scan
 scan.bootstrap(__file__)
 

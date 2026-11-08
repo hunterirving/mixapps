@@ -43,25 +43,22 @@ once you install one, it's yours.<br><br>
 1. **serve it**
 	- run `./serve.py` to start a development server. while the server is running, you can:
 		- **add new tracks** by...
+			- adding them to the `mix/` directory
 			- dragging them into the browser window
-			- moving them into the `mix/` directory
 			- running `./rip.py` to rip tracks from a physical CD
 			- running `./buy.py` to buy tracks on iTunes
 		- **reorder tracks** by dragging them up or down in the list
 		- **delete tracks** with `shift + click`
 
-2. **build it**
-	- once you're happy with your mix, run `./build.py` and follow the interactive prompts to generate `manifest.json` and `service-worker.js`, which enable PWA installation and offline functionality.
-
-3. **ship it**
+2. **ship it**
+	- over **your own network** (recommended):
+		- while `./serve.py` is running (with HTTPS enabled), use your phone to scan the QR codes it prints to the console (<a href="#local-network-installation">details</a>). no public host necessary, and nothing ever leaves your network.
 	- using a **public host:**
 		- when using media you have distribution rights for, you can upload the entire project directory to any static web host with HTTPS support (GitHub Pages, Neocities, AWS S3, etc).<br>
-	**publishing files you don't have the right to distribute may constitute copyright infringement.**
-	- over **your own wifi:**
-		- install onto your own devices using a <a href="#local-network-installation">local HTTPS server</a>. no public host necessary, and nothing ever leaves your network.
+		**publishing files you don't have the right to distribute may constitute copyright infringement.**
 
-4. **save it**
-	- once your mixapp is hosted, anyone can install it by opening the URL and following their browser's PWA installation steps:
+3. **save it**
+	- once your mixapp is hosted on an HTTPS-enabled server, anyone can install it by opening the URL and following their browser's PWA installation steps:
 		- **iOS (Safari)**: tap `···` → `Share` → `View More` → scroll down to reveal and tap `Add to Home Screen` → `Add`
 		- **Android**:
 			- **Firefox**: tap `⋮` → `··· More` → Add to Home screen → Add to home screen
@@ -74,16 +71,15 @@ once you install one, it's yours.<br><br>
 ## customization
 add `custom.css`, `custom.js`, `album_art.jpg`, and/or `icon.png` to `mix/` to customize your mixapp's appearance and behavior.
 
+your mixapp's name (displayed on your device's home screen) is set by the first of these that applies:
+- the text inside `mix/name.txt`, if it exists
+- the album name, if every track's metadata shares the same album name
+- `mixapp` (default)
+
 ## local network installation
-
-<details>
-<summary><strong>install on your own devices without a public host</strong></summary>
-
-<br>
-
 PWA installation requires a secure (HTTPS) connection. the easiest way to get one is to upload your files to a public host, but publishing files this way is only appropriate for content you have the right to distribute.
 
-if you'd like to install mixapps without pushing to a public host, you can use `https_serve.py` to serve the necessary files over HTTPS on your local network.
+if you'd like to install mixapps without pushing to a public host, you can use `serve.py` to serve the necessary files over HTTPS on your local network.
 
 <h3>how it works</h3>
 
@@ -102,12 +98,12 @@ trusting a CA tells a device to trust **any** HTTPS certificate the CA issues (f
 
 in practice the risk is small, because an attack needs **three** things to line up at once: your CA's private key has leaked off your computer, the attacker is on a network where they can intercept the installing device's traffic, *and* that device still trusts the CA. deny any one and there's nothing to exploit, so a few habits keep you safe:
 - **guard your local CA's private key**: as long as you don't move or share this file, it stays safely on your computer (see <a href="#cleaning-up">cleaning up</a>).
-- **install over a network you control**: your own wifi, not public/shared.
+- **install over a network you control**: your own home network, not a public/shared one.
 - **leave trust disabled when it isn't needed**: iOS lets you toggle trust on/off per custom CA; on Android, you can remove the CA when you're done and re-add it next time you want to install (see <a href="#cleaning-up">cleaning up</a>).
 
 <h3>usage</h3>
 
-1. run `./https_serve.py`. it will offer to install `mkcert` if needed, then create a local certificate authority (CA) on your computer.
+1. run `./serve.py`. it will offer to install `mkcert` if needed, then create a local certificate authority (CA) on your computer. if you decline, or your computer isn't connected to a network, it will serve over plain HTTP instead (you can still edit your mix, but other devices won't be able to install it).
 2. **first time on a new device:** scan the first QR code to download the CA certificate, then install and trust it.
 	- **iOS:**
 		1. scanning the QR code prompts you to allow the download. tap **Allow**.<br>
@@ -120,7 +116,7 @@ in practice the risk is small, because an attack needs **three** things to line 
 
 	a device that already trusts the CA from a previous run can skip this step.
 
-3. scan the second QR code to open your mixapp over HTTPS, then follow the <a href="https://hunterirving.github.io/web_workshop/pages/pwa">PWA installation instructions</a> for your device/OS to add it to your homescreen. after the initial installation and cache, mixapps work completely offline; they no longer need the network, server, or certificate.
+3. scan the second QR code to open your mixapp over HTTPS, then follow the <a href="https://hunterirving.github.io/web_workshop/pages/pwa">PWA installation instructions</a> for your device/OS to add it to your homescreen. after the initial installation and cache, mixapps work completely offline. they no longer need the network, server, or certificate.
 
 <h3 id="cleaning-up">cleaning up</h3>
 
@@ -128,8 +124,7 @@ in practice the risk is small, because an attack needs **three** things to line 
 	- **iOS, disable (keep installed):** `Settings` → `General` → `About` → `Certificate Trust Settings` → toggle the CA **off**; you can re-enable this in the future if you'd like to install another mixapp.
 	- **iOS, remove entirely:** `Settings` → `General` → `VPN & Device Management` → tap the profile → **Remove Profile**.
 	- **Android, remove:** `Settings` → `Security` → `Encryption & credentials` → `User credentials` (or `Trusted credentials` → `User`) → tap the mkcert entry → **Remove**.
-- **on your computer:** keeping mkcert's CA installed long-term is normal for a development machine, as long as you protect your CA's private key. you'd only need to remove the CA if you were done with it for good or thought your private key may have been exposed. in those cases, `./https_serve.py --reset` removes this tool's own certificates, then asks separately before touching the shared mkcert CA: first to untrust it on your development machine, then to delete its private key. mkcert uses one CA for everything, so if you also use mkcert for other projects, decline those steps to leave your CA intact.
-</details>
+- **on your computer:** keeping mkcert's CA installed long-term is normal for a development machine, as long as you protect your CA's private key. you'd only need to remove the CA if you were done with it for good or thought your private key may have been exposed. in those cases, `./serve.py --reset` deletes the local server's certificate and private key (in `~/.mixapps/https_certs`), then asks separately before touching the shared mkcert CA: first to untrust it on your development machine, then to delete its private key. mkcert uses one CA for everything, so if you also use mkcert for other projects, decline those steps to leave your CA intact.
 
 ## licenses
 this project is licensed under the <a href="LICENSE">GNU General Public License v3.0</a>.

@@ -15,7 +15,7 @@ const isInstalled =
 	window.navigator.standalone === true;
 
 // Register when installed as a PWA regardless of hostname so a mixapp
-// installed over LAN (via https_serve.py) caches for offline use too;
+// installed over LAN (via serve.py) caches for offline use too;
 // a plain browser tab still skips the SW so dev always sees latest files.
 if ('serviceWorker' in navigator && isInstalled) {
 	window.addEventListener('load', () => {

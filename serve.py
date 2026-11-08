@@ -1,87 +1,126 @@
 #!/usr/bin/env python3
 """
-Starts HTTP server for local testing
-Automatically manages a virtual environment for dependencies
+Serve your mixapp so you can edit it, and install it on devices on your local
+network as a PWA without a public web host or tunnel.
+
+Uses mkcert to mint a locally-trusted certificate for this machine's LAN IP. A
+device won't trust that cert until it trusts mkcert's root CA, so we print
+two QR codes:
+
+	1. an HTTP link that hands the device the mkcert root CA (the public root
+	   cert, no secret; served to any device until you stop the script)
+	2. an HTTPS link to the mixapp itself, for PWA installation
+
+Both servers shut down together on Ctrl+C.
+
+Without mkcert or a network connection, it falls back to plain HTTP. Editing
+still works, but other devices can't install the mixapp.
+
+After scanning the first QR code, install + trust the CA on the device:
+	iOS:     Settings → General → VPN & Device Management → install the profile,
+	         then Settings → General → About → Certificate Trust Settings →
+	         enable full trust
+	Android: open the downloaded file and follow the prompt to install it as a
+	         CA certificate
+
+Run with --reset to revoke the CA and delete the local certificates.
 """
 
 import http.server
 import socketserver
 import socket
+import ssl
 import sys
 import os
-import json
-import queue
-import threading
 import subprocess
-import time
-import urllib.parse
+import threading
 from pathlib import Path
 
-DEFAULT_PORT = 8000
+sys.path.insert(0, str(Path(__file__).parent / "lib"))
+import editor
+
+HTTP_PORT = 8000       # preferred; falls back to the next free port
+CERT_HTTP_PORT = 8001  # preferred; falls back to the next free port
+HTTPS_PORT = 8443      # preferred; falls back to the next free port
 SCRIPT_DIR = Path(__file__).parent.absolute()
-VENV_DIR = SCRIPT_DIR / "venv"
-MIX_DIR = SCRIPT_DIR / "mix"
-TRACKS_PATH = MIX_DIR / "tracks.json"
+CERT_DIR = Path.home() / ".mixapps" / "https_certs"
+CERT_FILE = CERT_DIR / "cert.pem"
+KEY_FILE = CERT_DIR / "key.pem"
 
-PUBLIC_FILES = {"index.html", "manifest.json", "service-worker.js"}
-PUBLIC_DIRS = {"resources", "mix"}
+# Path the phone fetches the root CA from. Anything else over HTTP 404s.
+CA_DOWNLOAD_PATH = "/rootCA.pem"
 
-SUPPORTED_UPLOAD_EXTENSIONS = ('.mp3', '.m4a', '.ogg', '.flac', '.wav')
-MAX_UPLOAD_BYTES = 200 * 1024 * 1024  # 200 MB per request
 
-# Serializes all reads/writes of tracks.json so rescans, reorders, and future
-# uploads can't race each other.
-tracks_lock = threading.Lock()
-
-# Set of per-client SSE queues. Each connected /events client gets a queue;
-# broadcast_tracks() pushes the latest tracks list onto every queue.
-sse_subscribers = set()
-sse_subscribers_lock = threading.Lock()
-
-# Canonical serialization of the most recently broadcast tracks list, so we
-# can fire on any content change (file add/remove/reorder or a hand-edit to
-# tracks.json's metadata) instead of only when /mix's filenames change.
-last_broadcast_serialized = None
+def base_path_for(mix_name):
+	"""Where this server mounts the app. Each mix gets its own path so mixapps
+	installed from this machine don't share one origin-wide install."""
+	return "/" + mix_name.lower().replace(" ", "_") + "/"
 
 
 def run_in_venv():
-	"""Re-run this script in the shared venv with serve.py's deps available"""
+	"""Re-run this script in the shared venv with qrcode available,
+	forwarding any user flags (eg. --reset) to the re-exec."""
 	import scan
-	python_path = scan.setup_venv(packages=("qrcode", "mutagen"))
+	# mutagen: editor.py's upload path reads tags to canonicalize filenames.
+	# psutil: finds this machine's LAN IP on networks with no internet route.
+	python_path = scan.setup_venv(packages=("qrcode", "mutagen", "psutil"))
 	try:
-		subprocess.check_call([str(python_path), __file__, "--in-venv"])
+		subprocess.check_call([str(python_path), __file__, "--in-venv", *sys.argv[1:]])
 	except (KeyboardInterrupt, subprocess.CalledProcessError):
 		pass
 	sys.exit(0)
 
 
 def get_local_ip():
-	"""Get the local IP address for network access"""
+	"""Get the LAN IP other devices on the network can reach this machine at."""
 	try:
-		# Create a socket to determine the local IP
 		s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-		# Connect to a public DNS server (doesn't actually send data)
-		s.connect(("8.8.8.8", 80))
+		# Asks which local address would route to a reserved documentation
+		# address (RFC 5737). Nothing is sent, but it needs a default route.
+		s.connect(("192.0.2.1", 80))
 		local_ip = s.getsockname()[0]
 		s.close()
 		return local_ip
 	except Exception:
-		return "Unable to determine"
+		return private_interface_ip()
 
 
-def find_available_port(start_port=DEFAULT_PORT, max_attempts=10):
-	"""Find an available port starting from start_port"""
-	for port in range(start_port, start_port + max_attempts):
-		try:
-			with socketserver.TCPServer(("", port), None) as s:
-				return port
-		except OSError:
-			continue
+def private_interface_ip():
+	"""The first private IPv4 address on any interface, for networks with no
+	internet route. None if psutil isn't installed or there isn't one."""
+	try:
+		import psutil
+	except ImportError:
+		return None
+	import ipaddress
+	for addresses in psutil.net_if_addrs().values():
+		for address in addresses:
+			if address.family != socket.AF_INET:
+				continue
+			ip = ipaddress.ip_address(address.address)
+			if ip.is_private and not ip.is_loopback and not ip.is_link_local:
+				return address.address
 	return None
 
 
-def print_qr_code(url):
-	"""Generate and print a QR code using block characters"""
+def find_available_port(start_port, max_attempts=20):
+	"""Return the first bindable port at or after start_port. Uses SO_REUSEADDR
+	so a socket lingering in TIME_WAIT from a prior run doesn't block us."""
+	for port in range(start_port, start_port + max_attempts):
+		s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+		try:
+			s.bind(("", port))
+			return port
+		except OSError:
+			continue
+		finally:
+			s.close()
+	return None
+
+
+def print_qr_code(url, caption):
+	"""Generate and print a QR code using block characters."""
 	try:
 		import qrcode
 
@@ -94,11 +133,11 @@ def print_qr_code(url):
 		qr.add_data(url)
 		qr.make(fit=True)
 
-		# Get the QR code matrix
 		matrix = qr.get_matrix()
 
+		print(f"\n{caption}\n")
 		for y in range(0, len(matrix), 2):
-			line = ""
+			line = " "
 			for x in range(len(matrix[y])):
 				top = matrix[y][x]
 				bottom = matrix[y + 1][x] if y + 1 < len(matrix) else False
@@ -111,442 +150,428 @@ def print_qr_code(url):
 				else:
 					line += " "
 			print(line)
-		print()
 	except ImportError:
-		print("\nQR code generation unavailable (qrcode library not installed)")
+		print(f"\n{caption}\n  (QR unavailable; open this URL manually) {url}")
 	except Exception as e:
-		print(f"\nCould not generate QR code: {e}")
+		print(f"\nCould not generate QR code: {e}\n  open manually: {url}")
 
 
-def read_tracks():
-	"""Read tracks.json from disk; return [] if missing or malformed."""
-	if not TRACKS_PATH.exists():
-		return []
+def mkcert_install_command():
+	"""Best-guess (command, package-manager-label) to install mkcert on this
+	platform, or (None, None) if no known manager is on PATH."""
+	from shutil import which
+	if sys.platform == "darwin":
+		if which("brew"):
+			return (["brew", "install", "mkcert"], "Homebrew")
+	elif sys.platform == "win32":
+		if which("choco"):
+			return (["choco", "install", "mkcert", "-y"], "Chocolatey")
+		if which("scoop"):
+			return (["scoop", "install", "mkcert"], "Scoop")
+	else:  # linux / other unix
+		# Most distros package mkcert; pick whichever manager is present.
+		if which("apt"):
+			return (["sudo", "apt", "install", "-y", "mkcert"], "apt")
+		if which("dnf"):
+			return (["sudo", "dnf", "install", "-y", "mkcert"], "dnf")
+		if which("pacman"):
+			return (["sudo", "pacman", "-S", "--noconfirm", "mkcert"], "pacman")
+		if which("brew"):
+			return (["brew", "install", "mkcert"], "Homebrew")
+	return (None, None)
+
+
+def manual_install_hint():
+	"""Platform-appropriate manual install instructions for mkcert."""
+	if sys.platform == "darwin":
+		return "brew install mkcert  (https://github.com/FiloSottile/mkcert)"
+	if sys.platform == "win32":
+		return "choco install mkcert  OR  scoop install mkcert  (https://github.com/FiloSottile/mkcert)"
+	return "install 'mkcert' via your package manager (https://github.com/FiloSottile/mkcert)"
+
+
+def require_mkcert():
+	"""Ensure mkcert is on PATH, offering to install it if it isn't. Returns
+	False if it's still missing, so the caller can fall back to plain HTTP."""
+	from shutil import which
+	if which("mkcert") is not None:
+		return True
+
+	print("To let your phone and other devices install your mixapp, this server")
+	print("needs HTTPS, which it sets up with mkcert. mkcert isn't installed yet.\n")
+	print("What mkcert does:")
+	print("  • creates a certificate authority (CA) on this computer and tells this")
+	print("    computer to trust it (you may be asked for your password)")
+	print("  • keeps the CA's private key on this computer. Anyone who got a copy")
+	print("    could impersonate websites to this computer and to any device that")
+	print("    trusts the CA, so don't share it.\n")
+	print("Without mkcert, the server uses plain HTTP. You can still edit your mix")
+	print("here, but other devices can't install it.\n")
+
+	cmd, label = mkcert_install_command()
+	if cmd is None:
+		print(f"To use HTTPS, install mkcert manually:  {manual_install_hint()}")
+		return False
+
+	answer = input(f"Install mkcert with {label} ({' '.join(cmd)})? [y/N] ").strip().lower()
+	if answer not in ("y", "yes"):
+		print(f"To use HTTPS later, install mkcert:  {manual_install_hint()}")
+		return False
+
 	try:
-		with open(TRACKS_PATH, 'r', encoding='utf-8') as f:
-			loaded = json.load(f)
-		return loaded if isinstance(loaded, list) else []
-	except (json.JSONDecodeError, OSError):
-		return []
-
-
-def _move_track_to(tracks, filename, insert_after):
-	"""Reorder `tracks` in place so the entry matching `filename` lands at
-	insert_after + 1 (clamped). Persists tracks.json if the order actually
-	changed. Returns True iff a move happened. Caller must hold tracks_lock."""
-	cur_idx = next((i for i, t in enumerate(tracks) if t.get('filename') == filename), -1)
-	if cur_idx == -1:
+		subprocess.check_call(cmd)
+	except (subprocess.CalledProcessError, KeyboardInterrupt):
+		print(f"\nInstall failed. To use HTTPS, install mkcert manually:  {manual_install_hint()}")
 		return False
-	target_idx = max(0, min(insert_after + 1, len(tracks) - 1))
-	if target_idx == cur_idx:
+
+	if which("mkcert") is None:
+		print("mkcert still isn't on PATH. Open a new terminal and run serve.py again.")
 		return False
-	entry = tracks.pop(cur_idx)
-	if target_idx > cur_idx:
-		target_idx -= 1
-	tracks.insert(target_idx, entry)
-	TRACKS_PATH.write_text(
-		json.dumps(tracks, indent='\t', ensure_ascii=False) + '\n',
-		encoding='utf-8',
-	)
 	return True
 
 
-def _canonical_name_for(audio_path, fallback_name):
-	"""Return the 'Artist – Title.ext' filename scan would canonicalize this
-	upload to, so we can dedup BEFORE moving the file into /mix. Returns None
-	if metadata can't be read."""
-	import scan
-	try:
-		from mutagen import File as MutagenFile  # type: ignore
-	except ImportError:
-		return None
-	try:
-		audio = MutagenFile(audio_path, easy=True)
-	except Exception:
-		return None
-	title = None
-	artist = None
-	if audio and audio.tags:
-		title = audio.tags.get('title', [None])[0]
-		artist = audio.tags.get('artist', [None])[0]
-	if not title:
-		title = Path(fallback_name).stem
-	if not artist:
-		artist = "Unknown Artist"
-	ext = Path(fallback_name).suffix
-	return f"{scan._sanitize_filename(artist)} – {scan._sanitize_filename(title)}{ext}"
+def ca_root_file():
+	"""Path to mkcert's root CA cert (rootCA.pem)."""
+	caroot = subprocess.run(
+		["mkcert", "-CAROOT"], capture_output=True, text=True
+	).stdout.strip()
+	return Path(caroot) / "rootCA.pem"
 
 
-def broadcast_tracks(tracks, renames=None):
-	"""Push the current tracks list to every connected SSE client if its
-	content differs from the last broadcast. `renames`, when non-empty,
-	carries [{from, to}, ...] so clients can migrate per-track state (eg.
-	preloaded blob URLs) without losing it across a canonicalizing rename.
-	Caller must hold tracks_lock."""
-	global last_broadcast_serialized
-	serialized = json.dumps(tracks, ensure_ascii=False, sort_keys=True)
-	if serialized == last_broadcast_serialized and not renames:
-		return
-	last_broadcast_serialized = serialized
-	payload = {'tracks': tracks, 'renames': renames or []}
-	with sse_subscribers_lock:
-		subscribers = list(sse_subscribers)
-	for q in subscribers:
+def ensure_ca_installed():
+	"""Ensure mkcert's local CA exists and is trusted by this machine.
+	May prompt for your password to write to the system trust store."""
+	if not ca_root_file().exists():
+		print("Setting up mkcert local CA (you may be prompted for your password)...")
+		subprocess.check_call(["mkcert", "-install"])
+
+
+def ensure_leaf_cert(local_ip):
+	"""Mint a cert/key for this machine's LAN IP (and localhost) if missing
+	or minted for a different IP."""
+	CERT_DIR.mkdir(parents=True, exist_ok=True)
+	if CERT_FILE.exists() and KEY_FILE.exists():
 		try:
-			q.put_nowait(payload)
-		except queue.Full:
-			pass
-
-
-def rescan_and_maybe_broadcast():
-	"""Rescan /mix, then broadcast if the resulting tracks list differs from
-	what we last sent."""
-	import scan
-	tracks, _changed, renames = scan.rescan(silent=True)
-	broadcast_tracks(tracks, renames=renames)
-	return tracks
-
-
-def start_rescan_ticker(interval=1.0):
-	"""Background thread that periodically rescans /mix so changes made
-	directly on disk (eg. user dragging a file in or `rm`-ing one from the
-	terminal) reach connected clients without anyone hitting the server."""
-	def tick():
-		while True:
-			time.sleep(interval)
-			try:
-				with tracks_lock:
-					rescan_and_maybe_broadcast()
-			except Exception as e:
-				# Don't let a bad scan kill the ticker.
-				print(f"rescan tick error: {e}", file=sys.stderr)
-	t = threading.Thread(target=tick, daemon=True)
-	t.start()
-
-
-class TrackRequestHandler(http.server.SimpleHTTPRequestHandler):
-	# keep-alive; every response below needs a Content-Length or must close
-	protocol_version = 'HTTP/1.1'
-	# don't let idle connections pin threads forever
-	timeout = 60
-	# Nagle would stall the body write behind the header write
-	disable_nagle_algorithm = True
-
-	def do_GET(self):
-		# Rescan /mix on every tracks.json fetch so the page always sees
-		# what's actually on disk (added via rip.py/buy.py or by hand).
-		if self.path == '/mix/tracks.json':
-			with tracks_lock:
-				rescan_and_maybe_broadcast()
-			return super().do_GET()
-
-		if self.path == '/events':
-			return self._serve_sse()
-
-		return super().do_GET()
-
-	def _is_public(self, fs_path):
-		parts = Path(fs_path).relative_to(self.directory).parts
-		if not parts:
-			return True
-		if any(part.startswith('.') for part in parts):
-			return False
-		if len(parts) == 1:
-			return parts[0] in PUBLIC_FILES
-		name = parts[-1].lower()
-		return parts[0] in PUBLIC_DIRS and name != 'readme.md' and not name.endswith('.uploading')
-
-	def send_head(self):
-		if not self._is_public(self.translate_path(self.path)):
-			self.send_error(404)
-			return None
-		return super().send_head()
-
-	def list_directory(self, path):
-		self.send_error(404)
-		return None
-
-	def _serve_sse(self):
-		"""Server-Sent Events stream of tracks.json changes."""
-		self.send_response(200)
-		self.send_header('Content-Type', 'text/event-stream')
-		self.send_header('Cache-Control', 'no-cache')
-		# The stream has no Content-Length, so under HTTP/1.1 it has to be
-		# delimited by closing the socket. Sending this also flips
-		# close_connection, so the handler won't try to reuse the socket.
-		self.send_header('Connection', 'close')
-		self.send_header('X-Accel-Buffering', 'no')
-		self.end_headers()
-
-		q = queue.Queue(maxsize=16)
-		with sse_subscribers_lock:
-			sse_subscribers.add(q)
-
-		try:
-			# Initial sync so a fresh tab gets the current state without
-			# waiting for the next change. No renames context: a fresh
-			# client has no prior state to migrate from.
-			with tracks_lock:
-				initial = read_tracks()
-			self._send_sse_event('tracks', {'tracks': initial, 'renames': []})
-
-			while True:
-				try:
-					payload = q.get(timeout=15)
-					self._send_sse_event('tracks', payload)
-				except queue.Empty:
-					# Heartbeat keeps proxies and idle connections from
-					# closing the stream.
-					self.wfile.write(b': keepalive\n\n')
-					self.wfile.flush()
-		except (BrokenPipeError, ConnectionResetError, OSError):
-			pass
-		finally:
-			with sse_subscribers_lock:
-				sse_subscribers.discard(q)
-
-	def _reply_status(self, status, body=b''):
-		"""Short reply with a Content-Length. Errors also close the socket,
-		since an early return can leave an unread body in the buffer."""
-		if isinstance(body, str):
-			body = body.encode('utf-8')
-		self.send_response(status)
-		self.send_header('Content-Length', str(len(body)))
-		if status >= 400:
-			self.send_header('Connection', 'close')
-		self.end_headers()
-		if body:
-			try:
-				self.wfile.write(body)
-			except (BrokenPipeError, ConnectionResetError):
-				pass
-
-	def _reply_json(self, status, payload):
-		body = json.dumps(payload).encode('utf-8')
-		self.send_response(status)
-		self.send_header('Content-Type', 'application/json')
-		self.send_header('Content-Length', str(len(body)))
-		self.end_headers()
-		self.wfile.write(body)
-
-	def _send_sse_event(self, event, data):
-		payload = json.dumps(data, ensure_ascii=False)
-		message = f'event: {event}\ndata: {payload}\n\n'.encode('utf-8')
-		self.wfile.write(message)
-		self.wfile.flush()
-
-	def do_POST(self):
-		# Local-only: receive a reordered tracks array and overwrite tracks.json
-		if self.path != '/tracks':
-			self._reply_status(404)
-			return
-		length = int(self.headers.get('Content-Length', '0'))
-		payload = json.loads(self.rfile.read(length))
-		with tracks_lock:
-			TRACKS_PATH.write_text(
-				json.dumps(payload, indent='\t', ensure_ascii=False) + '\n',
-				encoding='utf-8',
-			)
-			broadcast_tracks(payload)
-		self.send_response(204)
-		self.end_headers()
-
-	def do_PUT(self):
-		# Local-only: drag-and-drop upload from a connected browser.
-		# Path is /upload/<url-encoded-filename>; headers carry the
-		# desired insertion index (X-Insert-After: -1 means prepend).
-		prefix = '/upload/'
-		if not self.path.startswith(prefix):
-			self._reply_status(404)
-			return
-
-		raw_name = urllib.parse.unquote(self.path[len(prefix):])
-		# Strip any client-supplied path components.
-		filename = Path(raw_name).name
-		ext = Path(filename).suffix.lower()
-		if not filename or ext not in SUPPORTED_UPLOAD_EXTENSIONS:
-			self._reply_status(415)
-			return
-
-		length = int(self.headers.get('Content-Length', '0'))
-		if length <= 0 or length > MAX_UPLOAD_BYTES:
-			self._reply_status(413)
-			return
-
-		try:
-			insert_after = int(self.headers.get('X-Insert-After', '-1'))
-		except ValueError:
-			insert_after = -1
-
-		# Stream the body to a temp file in MIX_DIR, then move into place
-		# atomically so a partial write is never visible to the rescan.
-		MIX_DIR.mkdir(parents=True, exist_ok=True)
-		tmp_path = MIX_DIR / (filename + '.uploading')
-		try:
-			with open(tmp_path, 'wb') as out:
-				remaining = length
-				while remaining > 0:
-					chunk = self.rfile.read(min(64 * 1024, remaining))
-					if not chunk:
-						break
-					out.write(chunk)
-					remaining -= len(chunk)
-			if remaining != 0:
-				tmp_path.unlink(missing_ok=True)
-				self._reply_status(400)
+			sans = ssl._ssl._test_decode_cert(str(CERT_FILE)).get("subjectAltName", ())
+		except (AttributeError, OSError):
+			print("Couldn't read the existing certificate.")
+		else:
+			old_ips = [v for k, v in sans if k == "IP Address" and v != "127.0.0.1"]
+			if local_ip in old_ips:
 				return
+			print(f"This machine's LAN IP changed ({', '.join(old_ips)} → {local_ip}).")
+	print(f"Minting certificate for {local_ip}...")
+	subprocess.check_call([
+		"mkcert",
+		"-cert-file", str(CERT_FILE),
+		"-key-file", str(KEY_FILE),
+		local_ip, "localhost", "127.0.0.1",
+	])
 
-			with tracks_lock:
-				import scan
-				# Dedup by canonical name: if a file with the canonical
-				# "Artist – Title.ext" name already lives in /mix, drop
-				# the upload and just reorder the existing entry to the
-				# requested slot so the client still gets the FLIP.
-				canonical = _canonical_name_for(tmp_path, filename)
-				if canonical and (MIX_DIR / canonical).exists():
-					tmp_path.unlink(missing_ok=True)
-					tracks = read_tracks()
-					moved = _move_track_to(tracks, canonical, insert_after)
-					if moved:
-						broadcast_tracks(tracks)
-					final_index = next((i for i, t in enumerate(tracks) if t.get('filename') == canonical), -1)
-					self._reply_json(200, {'filename': canonical, 'duplicate': True, 'moved': moved, 'final_index': final_index})
-					return
 
-				tmp_path.rename(MIX_DIR / filename)
-				placed_name = filename
-
-				tracks, _changed, renames = scan.rescan(silent=True)
-
-				# Find the canonical (post-canonicalize) filename for the
-				# upload by following the rename chain.
-				new_name = placed_name
-				for r in renames:
-					if r['from'] == new_name:
-						new_name = r['to']
-
-				_move_track_to(tracks, new_name, insert_after)
-				broadcast_tracks(tracks, renames=renames)
-				final_index = next((i for i, t in enumerate(tracks) if t.get('filename') == new_name), -1)
-
-			self._reply_json(200, {'filename': new_name, 'final_index': final_index})
-		except Exception as e:
-			tmp_path.unlink(missing_ok=True)
-			self._reply_status(500, str(e))
-
-	def do_DELETE(self):
-		# Local-only: remove a track's audio file from /mix and prune
-		# tracks.json. Path is /tracks/<url-encoded-filename>.
-		prefix = '/tracks/'
-		if not self.path.startswith(prefix):
-			self._reply_status(404)
-			return
-
-		filename = urllib.parse.unquote(self.path[len(prefix):])
-		target = (MIX_DIR / filename).resolve()
-		try:
-			target.relative_to(MIX_DIR.resolve())
-		except ValueError:
-			self._reply_status(400)
-			return
-		if target == TRACKS_PATH.resolve() or target.name != filename:
-			self._reply_status(400)
-			return
-		with tracks_lock:
-			try:
-				target.unlink()
-			except FileNotFoundError:
-				pass
-			except OSError as e:
-				self._reply_status(500, str(e))
-				return
-			tracks = [t for t in read_tracks() if t.get('filename') != filename]
-			TRACKS_PATH.write_text(
-				json.dumps(tracks, indent='\t', ensure_ascii=False) + '\n',
-				encoding='utf-8',
-			)
-			broadcast_tracks(tracks)
-		self.send_response(204)
-		self.end_headers()
-
-def start_server():
-	"""Start the HTTP server (runs after venv is set up)"""
-	# Change to script directory
-	os.chdir(SCRIPT_DIR)
-
-	# Periodically rescan /mix so on-disk changes propagate to the UI even
-	# when nothing is hitting an HTTP endpoint.
-	start_rescan_ticker()
-
-	# Find an available port
-	port = find_available_port(DEFAULT_PORT)
-
-	if port is None:
-		print(f"Error: Could not find an available port (tried {DEFAULT_PORT}-{DEFAULT_PORT + 9})")
+def start_ca_server(local_ip):
+	"""Start a plain-HTTP server that hands out the mkcert root CA, and return
+	it running. The CA is the *public* root cert (no secret), so there's no
+	reason to limit how many times or to how many devices it's served. leave
+	it up alongside the HTTPS server so you can set up multiple devices, and
+	tear both down together on Ctrl+C. Caller owns shutdown."""
+	ca_file = ca_root_file()
+	if not ca_file.exists():
+		print(f"Error: root CA not found at {ca_file}")
 		sys.exit(1)
 
-	# Get local IP for network access
-	local_ip = get_local_ip()
+	ca_bytes = ca_file.read_bytes()
 
-	# Create server
+	class CAHandler(http.server.BaseHTTPRequestHandler):
+		def log_message(self, *args):
+			pass
 
-	# Suppress default logging and broken pipe errors
-	class QuietHandler(TrackRequestHandler):
+		def do_GET(self):
+			# Redirect bare visits to the download path so a typo'd / still works.
+			if self.path in ("/", "/index.html"):
+				self.send_response(302)
+				self.send_header("Location", CA_DOWNLOAD_PATH)
+				self.end_headers()
+				return
+			if self.path != CA_DOWNLOAD_PATH:
+				self.send_error(404)
+				return
+			# x-x509-ca-cert makes iOS offer to install it as a CA profile.
+			self.send_response(200)
+			self.send_header("Content-Type", "application/x-x509-ca-cert")
+			self.send_header("Content-Length", str(len(ca_bytes)))
+			self.send_header(
+				"Content-Disposition", 'attachment; filename="rootCA.pem"'
+			)
+			self.end_headers()
+			try:
+				self.wfile.write(ca_bytes)
+			except (BrokenPipeError, ConnectionResetError):
+				return
+
+	port = find_available_port(CERT_HTTP_PORT)
+	if port is None:
+		print(f"Error: no free port near {CERT_HTTP_PORT} for the CA server.")
+		sys.exit(1)
+	http.server.HTTPServer.allow_reuse_address = True
+	httpd = http.server.HTTPServer(("", port), CAHandler)
+	threading.Thread(target=httpd.serve_forever, daemon=True).start()
+
+	cert_url = f"http://{local_ip}:{port}{CA_DOWNLOAD_PATH}"
+	print("=" * 69)
+	print("STEP 1: install + trust the local CA on each device (first time only)")
+	print("=" * 69)
+	print_qr_code(cert_url, "Scan to download the root certificate:")
+	print(f"  {cert_url}")
+	print("\nOn iOS, after downloading:")
+	print("  • Settings → General → VPN & Device Management → install the profile")
+	print("  • Settings → General → About → Certificate Trust Settings →")
+	print("    toggle ON full trust for the mkcert CA")
+	print("\nOn Android, after downloading:")
+	print("  • open the downloaded file, or Settings → Security → Encryption &")
+	print("    credentials → Install a certificate → CA certificate, then confirm")
+	print("  • installing the CA is what makes it trusted; there's no separate")
+	print("    trust toggle (exact menu names vary by version/manufacturer)")
+	print("\n(skip this step on a device that already trusts the CA from a previous run)")
+	return httpd
+
+
+class ThreadingServer(socketserver.ThreadingTCPServer):
+	daemon_threads = True
+	allow_reuse_address = True
+	# default backlog of 5 drops connections when a device precaches in bursts
+	request_queue_size = 128
+
+
+class TLSThreadingServer(ThreadingServer):
+	"""Threading server that negotiates TLS in the worker thread, so
+	handshakes run in parallel."""
+
+	def __init__(self, server_address, handler_cls, ssl_context):
+		self.ssl_context = ssl_context
+		super().__init__(server_address, handler_cls)
+
+	def process_request_thread(self, request, client_address):
+		try:
+			request.settimeout(20)  # cap how long a dead client's handshake lingers
+			request = self.ssl_context.wrap_socket(request, server_side=True)
+			request.settimeout(None)
+		except (ssl.SSLError, OSError):
+			# Untrusted CA, a probe, or a client that walked away.
+			self.shutdown_request(request)
+			return
+		super().process_request_thread(request, client_address)
+
+
+def make_handler(base_path):
+	"""editor.py's handler, mounted under base_path. It adds the SSE change
+	stream (/events), reorder save (POST /tracks), drag-drop upload
+	(PUT /upload/<name>), and delete (DELETE /tracks/<name>). Those endpoints
+	are root-absolute, so base_path stripping (GET-only) doesn't touch them."""
+	class QuietHandler(editor.TrackRequestHandler):
 		def end_headers(self):
-			self.send_header('Cache-Control', 'no-cache')
+			self.send_header("Cache-Control", "no-cache")
 			super().end_headers()
 
-		def log_message(self, format, *args):
+		def log_message(self, *args):
 			pass
 
 		def handle(self):
-			"""Handle requests and suppress broken pipe errors"""
 			try:
 				super().handle()
-			except (BrokenPipeError, ConnectionResetError):
-				# Browser cancelled the request (normal for media streaming/preloading)
+			except (BrokenPipeError, ConnectionResetError, ssl.SSLError):
 				pass
 
+		def translate_path(self, path):
+			# Strip the manifest base prefix so /mixapp_name/foo maps to ./foo.
+			if base_path != "/" and path.startswith(base_path):
+				path = "/" + path[len(base_path):]
+			return super().translate_path(path)
 
-	class ThreadedServer(socketserver.ThreadingTCPServer):
-		daemon_threads = True
-		# default backlog of 5 drops connections when a browser opens several at once
-		request_queue_size = 128
+		def do_GET(self):
+			# Bounce a bare root visit into the app so manual navigation works.
+			if base_path != "/" and self.path in ("/", "/index.html"):
+				self.send_response(302)
+				self.send_header("Location", base_path)
+				self.send_header("Content-Length", "0")
+				self.end_headers()
+				return
+			# super() is editor.TrackRequestHandler.do_GET, which handles
+			# /events (SSE) and rescans on /mix/tracks.json before serving.
+			return super().do_GET()
 
-	try:
-		with ThreadedServer(("", port), QuietHandler) as httpd:
-			local_url = f"http://localhost:{port}"
-			network_url = f"http://{local_ip}:{port}"
+	return QuietHandler
 
-			print("=" * 60)
-			print("💿 mixapps · local test server")
-			print("=" * 60 + "\n")
 
-			# Print QR code for easy mobile access
-			print_qr_code(network_url)
-
-			print(f"Local access:   {local_url}")
-			print(f"Network access: {network_url}")
-			print("\nPress Ctrl+C to stop the server")
-
-			# Serve forever
-			httpd.serve_forever()
-
-	except KeyboardInterrupt:
-		print("\n\nShutting down server...")
-		sys.exit(0)
-	except Exception as e:
-		print(f"\nError starting server: {e}")
+def serve_http(local_ip=None):
+	"""Serve SCRIPT_DIR over plain HTTP, for when HTTPS isn't available.
+	Runs until Ctrl+C."""
+	port = find_available_port(HTTP_PORT)
+	if port is None:
+		print(f"Error: no free port near {HTTP_PORT} for the HTTP server.")
 		sys.exit(1)
+
+	with ThreadingServer(("", port), make_handler("/")) as httpd:
+		print("\n" + "=" * 60)
+		print("Serving over plain HTTP")
+		print("=" * 60)
+		print(f"\nEdit your mix at:  http://localhost:{port}")
+		if local_ip:
+			print(f"Devices on your network can open http://{local_ip}:{port}")
+			print("but can't install it, because installing needs HTTPS.")
+		print("\nPress Ctrl+C to stop the server")
+
+		try:
+			httpd.serve_forever()
+		except KeyboardInterrupt:
+			print("\n\nShutting down...")
+
+
+def serve_https(local_ip, base_path, ca_httpd=None):
+	"""Serve SCRIPT_DIR over HTTPS for PWA installation, mounted under
+	base_path so the installed app's start_url resolves. Runs until Ctrl+C,
+	then also shuts down the CA HTTP server (if given)."""
+	ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+	ctx.load_cert_chain(certfile=str(CERT_FILE), keyfile=str(KEY_FILE))
+
+	port = find_available_port(HTTPS_PORT)
+	if port is None:
+		print(f"Error: no free port near {HTTPS_PORT} for the HTTPS server.")
+		if ca_httpd is not None:
+			ca_httpd.shutdown()
+			ca_httpd.server_close()
+		sys.exit(1)
+
+	with TLSThreadingServer(("", port), make_handler(base_path), ctx) as httpd:
+		https_url = f"https://{local_ip}:{port}{base_path}"
+
+		print("\n" + "=" * 59)
+		print("STEP 2: install your mixapp (once the device trusts the CA)")
+		print("=" * 59)
+		print_qr_code(https_url, "Scan to open your mixapp over HTTPS:")
+		print(f"  {https_url}")
+		print("\nThen install it as a PWA: https://hunterirving.github.io/web_workshop/pages/pwa")
+		print("\nPress Ctrl+C to stop the server(s)")
+
+		try:
+			httpd.serve_forever()
+		except KeyboardInterrupt:
+			print("\n\nShutting down...")
+		finally:
+			if ca_httpd is not None:
+				ca_httpd.shutdown()
+				ca_httpd.server_close()
+
+
+def caroot_dir():
+	"""Path to mkcert's CAROOT folder (holds rootCA.pem and rootCA-key.pem)."""
+	caroot = subprocess.run(
+		["mkcert", "-CAROOT"], capture_output=True, text=True
+	).stdout.strip()
+	return Path(caroot) if caroot else None
+
+
+def reset_certs():
+	"""Opt-in teardown, in two stages so it's safe alongside other mkcert use.
+
+	mkcert keeps ONE shared CA per machine, so anything else you run with
+	mkcert trusts the same CA. Stage 1 removes only THIS tool's own leaf certs
+	(always safe). Stage 2 removes the shared mkcert CA itself (untrust + optional
+	key deletion). Guarded, because it affects every project that uses
+	mkcert, not just this one."""
+	from shutil import rmtree, which
+
+	# Stage 1: our own leaf certs.
+	if CERT_DIR.exists():
+		rmtree(CERT_DIR)
+		print(f"Removed this tool's local certificates ({CERT_DIR}).")
+	else:
+		print("No local certificates to remove.")
+
+	# Stage 2: the shared mkcert CA. Skip entirely unless asked, since other
+	# projects on this machine may rely on it and we can't detect them.
+	print(
+		"\nThe mkcert CA itself is SHARED across everything you use mkcert for"
+		" on this computer, not just this tool. Leaving it installed is normal."
+	)
+	answer = input(
+		"Also remove the shared mkcert CA (untrust it system-wide)? [y/N] "
+	).strip().lower()
+	if answer not in ("y", "yes"):
+		print("Left the mkcert CA in place.")
+		return
+
+	if which("mkcert"):
+		try:
+			subprocess.check_call(["mkcert", "-uninstall"])
+			print("Stopped this computer from trusting the mkcert CA.")
+		except subprocess.CalledProcessError as e:
+			print(f"mkcert -uninstall failed: {e}")
+
+	# mkcert -uninstall removes trust but does NOT delete the CA. The private key
+	# (rootCA-key.pem) is the sensitive material, so offer to delete it too, with
+	# a separate confirmation since it's irreversible and shared.
+	caroot = caroot_dir()
+	if caroot and (caroot / "rootCA-key.pem").exists():
+		print(
+			"\nThe CA's PRIVATE KEY is still on disk at:\n"
+			f"  {caroot}\n"
+			"Per mkcert: \"the rootCA-key.pem file ... gives complete power to\n"
+			"intercept secure requests from your machine. Do not share it.\"\n"
+			"Deleting it removes the shared CA entirely; future mkcert use\n"
+			"(here or in any project) will generate a brand-new one."
+		)
+		ans2 = input("Delete the CA key + folder now? [y/N] ").strip().lower()
+		if ans2 in ("y", "yes"):
+			rmtree(caroot)
+			print(f"Removed {caroot}")
+		else:
+			print("Left the CA key in place.")
+
+	print("\nNote: this does NOT touch any device; remove or untrust the CA\n"
+		"there separately (see the instructions printed during install).")
+
+
+def start():
+	os.chdir(SCRIPT_DIR)
+	mix_name = editor.rebuild_pwa_if_changed()
+	editor.print_mix_name(mix_name)
+
+	# Rescan /mix periodically so edits made on disk reach connected browser
+	# tabs over the SSE stream.
+	editor.start_rescan_ticker()
+
+	local_ip = get_local_ip()
+	if not local_ip:
+		print("\nCouldn't find this computer's address on a local network, so other")
+		print("devices can't reach it. To install your mixapp on your phone, connect")
+		print("to a network and run serve.py again.")
+		serve_http()
+		return
+
+	if not require_mkcert():
+		serve_http(local_ip)
+		return
+
+	base_path = base_path_for(mix_name)
+	ensure_ca_installed()
+	ensure_leaf_cert(local_ip)
+	ca_httpd = start_ca_server(local_ip)
+	serve_https(local_ip, base_path, ca_httpd=ca_httpd)
 
 
 def main():
-	"""Main entry point"""
-	# Check if we're already running in venv
 	if "--in-venv" not in sys.argv:
 		run_in_venv()
 	else:
-		start_server()
+		try:
+			if "--reset" in sys.argv:
+				reset_certs()
+			else:
+				start()
+		except KeyboardInterrupt:
+			print("\nCancelled.")
+			sys.exit(130)
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ Usage: ./rip.py [track_number]
 
 If /mix holds only tracks from this CD, ripping the whole disc also
 downloads its cover art to mix/album_art.jpg, scales it to mix/icon.png
-and runs build.py
+and names the mixapp after the album in mix/name.txt
 """
 
 import os
@@ -19,7 +19,7 @@ import sys
 
 # Hop into the shared venv (managed by scan.py) before doing anything else,
 # so scan.rescan() has mutagen available when we call it after ripping.
-sys.path.insert(0, str(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib"))
 import scan
 scan.bootstrap(__file__, packages=("mutagen", "discid"))
 
@@ -299,10 +299,13 @@ def mix_tracks():
 	return {f.name for f in MIX_DIR.iterdir() if f.suffix.lower() in scan.SUPPORTED_EXTENSIONS}
 
 
-def build_mixapp(album):
-	"""Run build.py, answering its prompts with the album name and the default path"""
-	print(f"\nBuilding mixapp \"{album}\"...")
-	subprocess.run([sys.executable, str(SCRIPT_DIR / "build.py")], input=f"{album}\n\n", text=True)
+def name_mixapp(album):
+	"""Write the album name to mix/name.txt, unless the mix is already named"""
+	name_file = MIX_DIR / "name.txt"
+	if name_file.exists():
+		return
+	name_file.write_text(album + "\n", encoding="utf-8")
+	print(f"\n✓ Named mixapp \"{album}\" in mix/name.txt")
 
 
 def find_cd_mount():
@@ -466,7 +469,7 @@ def output_extension(audio_file):
 
 
 def canonical_name(artist, title, ext):
-	"""Match scan.py / serve.py's canonical 'Artist – Title.ext' form so we
+	"""Match scan.py / editor.py's canonical 'Artist – Title.ext' form so we
 	can dedup against tracks already in /mix."""
 	return f"{scan._sanitize_filename(artist)} – {scan._sanitize_filename(title)}{ext}"
 
@@ -700,8 +703,8 @@ def rip_cd(only_track=None):
 			download_album_art(release_id, release_group_id)
 		if (MIX_DIR / "album_art.jpg").exists() and not (MIX_DIR / "icon.png").exists():
 			make_icon()
-		build_mixapp(album)
-		print("\nRun https_serve.py to install your mixapp.")
+		name_mixapp(album)
+		print("\nRun serve.py to install your mixapp.")
 	elif success_count > 0:
 		print("\nRun serve.py to test your mixapp.")
 

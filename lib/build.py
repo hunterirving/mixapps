@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Creates manifest.json and service-worker.js
-(PWA requirements) based on the contents of tracks.json
+(PWA requirements) based on the contents of /mix.
+serve.py runs this automatically.
 """
 
 import hashlib
@@ -9,60 +10,51 @@ import json
 import re
 from pathlib import Path
 
-# Bootstrap into the shared venv first thing (re-execs on first run),
-# so scan.rescan() has mutagen available when we call it before building.
 import scan
-scan.bootstrap(__file__)
+
+DEFAULT_NAME = "mixapp"
 
 
-def get_configuration():
-	"""Prompt user for configuration values"""
-	print("=" * 60)
-	print("PWA Configuration")
-	print("=" * 60)
-	print()
+def shared_album():
+	"""The album tag every track in /mix shares, or None"""
+	try:
+		from mutagen import File as MutagenFile  # type: ignore
+	except ImportError:
+		return None
+	albums = set()
+	for path in MIX_DIR.iterdir():
+		if path.suffix.lower() not in scan.SUPPORTED_EXTENSIONS:
+			continue
+		try:
+			audio = MutagenFile(path, easy=True)
+		except Exception:
+			return None
+		album = audio.tags.get('album', [None])[0] if audio and audio.tags else None
+		if not album:
+			return None
+		albums.add(album.strip())
+	return albums.pop() if len(albums) == 1 else None
 
-	# Get app name
-	app_name = input("Enter a name for your mixapp: ").strip()
-	if not app_name:
-		print("Error: App name is required")
-		exit(1)
 
-	# Get base path with smart default
-	default_path = app_name.lower().replace(" ", "_")
-	print()
-	print(f"Enter the deployment path (or press Return/Enter for default)")
-	print(f"Default: /{default_path}/")
-	base_path_input = input("Path: ").strip()
+def mix_name():
+	"""mix/name.txt if present, else the album every track shares, else DEFAULT_NAME"""
+	if NAME_FILE.exists():
+		name = NAME_FILE.read_text(encoding='utf-8').strip()
+		if name:
+			return name
+	return shared_album() or DEFAULT_NAME
 
-	if base_path_input:
-		# User provided a path - ensure it has leading/trailing slashes
-		base_path = base_path_input
-		if not base_path.startswith("/"):
-			base_path = "/" + base_path
-		if not base_path.endswith("/"):
-			base_path = base_path + "/"
-	else:
-		# Use default
-		base_path = f"/{default_path}/"
-		print(f"Using default path: {base_path}")
-
-	print()
-	print(f"Configuration:")
-	print(f"  App Name: {app_name}")
-	print(f"  Base Path: {base_path}")
-	print()
-
-	return app_name, base_path
 
 # File paths (no need to edit these)
-SCRIPT_DIR = Path(__file__).parent.absolute()
-TRACKS_JSON = SCRIPT_DIR / "mix" / "tracks.json"
-STYLES_CSS = SCRIPT_DIR / "resources" / "styles.css"
-CUSTOM_CSS = SCRIPT_DIR / "mix" / "custom.css"
+ROOT_DIR = Path(__file__).parent.parent.absolute()
+MIX_DIR = ROOT_DIR / "mix"
+NAME_FILE = MIX_DIR / "name.txt"
+TRACKS_JSON = ROOT_DIR / "mix" / "tracks.json"
+STYLES_CSS = ROOT_DIR / "resources" / "styles.css"
+CUSTOM_CSS = ROOT_DIR / "mix" / "custom.css"
 
 
-def get_background_color():
+def get_background_color(log):
 	"""Extract the --background CSS variable, preferring custom.css over styles.css"""
 	# Check custom.css first (overrides styles.css)
 	for css_file in [CUSTOM_CSS, STYLES_CSS]:
@@ -76,74 +68,67 @@ def get_background_color():
 		)
 		if match:
 			color = match.group(1).strip()
-			print(f"Found background color in {css_file.name}: {color}")
+			log(f"Found background color in {css_file.name}: {color}")
 			return color
 
-	print("Warning: --background not found in any CSS file. Using default color.")
+	log("Warning: --background not found in any CSS file. Using default color.")
 	return "#080a0c"
 
 
-def build_pwa(app_name=None, base_path=None):
-	"""Generate manifest.json and service-worker.js based on tracks.json
-
-	Args:
-		app_name: Name of the app. If None, will be prompted via get_configuration()
-		base_path: Base path for the app. If None, will be prompted via get_configuration()
-	"""
-	# Get configuration if not provided
-	if app_name is None or base_path is None:
-		app_name, base_path = get_configuration()
+def build_pwa(silent=False):
+	"""Generate manifest.json and service-worker.js from /mix. Returns the mix name."""
+	log = (lambda *args: None) if silent else print
+	app_name = mix_name()
 
 	# Derived values
 	short_name = app_name
 	cache_name = app_name
 	app_description = f"{app_name}"
 
-	print("Building PWA files...")
-	print(f"  Cache name: {cache_name}")
+	log("Building PWA files...")
+	log(f"  Cache name: {cache_name}")
 
 	# Rescan /mix so tracks.json reflects any additions/removals on disk
 	# before we snapshot it into the service worker's static file list.
 	scan.rescan(silent=True)
 
 	if not TRACKS_JSON.exists():
-		print("Error: tracks.json not found.")
+		log("Error: tracks.json not found.")
 		return
 
 	with open(TRACKS_JSON, 'r', encoding='utf-8') as f:
 		tracks = json.load(f)
 
 	# Get background color from styles.css
-	background_color = get_background_color()
+	background_color = get_background_color(log)
 
 	# mix/album_art.jpg overrides the default
-	custom_album_art = SCRIPT_DIR / "mix" / "album_art.jpg"
-	album_art_file = custom_album_art if custom_album_art.exists() else SCRIPT_DIR / "resources" / "album_art.jpg"
+	custom_album_art = ROOT_DIR / "mix" / "album_art.jpg"
+	album_art_file = custom_album_art if custom_album_art.exists() else ROOT_DIR / "resources" / "album_art.jpg"
 	album_art_path = "mix/album_art.jpg" if custom_album_art.exists() else "resources/album_art.jpg"
 	# append a content hash so the URL changes when the image changes
 	if album_art_file.exists():
 		art_hash = hashlib.md5(album_art_file.read_bytes()).hexdigest()[:8]
 		album_art_path = f"{album_art_path}?v={art_hash}"
-	print(f"  Album art: {album_art_path}")
+	log(f"  Album art: {album_art_path}")
 
 	# mix/icon.png overrides the default
-	custom_icon = SCRIPT_DIR / "mix" / "icon.png"
-	icon_file = custom_icon if custom_icon.exists() else SCRIPT_DIR / "resources" / "icon.png"
+	custom_icon = ROOT_DIR / "mix" / "icon.png"
+	icon_file = custom_icon if custom_icon.exists() else ROOT_DIR / "resources" / "icon.png"
 	icon_path = "mix/icon.png" if custom_icon.exists() else "resources/icon.png"
 	# append a content hash so the URL changes when the image changes
 	if icon_file.exists():
 		icon_hash = hashlib.md5(icon_file.read_bytes()).hexdigest()[:8]
 		icon_path = f"{icon_path}?v={icon_hash}"
-	print(f"  Icon: {icon_path}")
+	log(f"  Icon: {icon_path}")
 
 	# Generate manifest.json
 	manifest = {
-		"id": base_path,
 		"name": app_name,
 		"short_name": short_name,
 		"description": app_description,
-		"start_url": base_path,
-		"scope": base_path,
+		"start_url": "./",
+		"scope": "./",
 		"display": "standalone",
 		"background_color": background_color,
 		"theme_color": background_color,
@@ -151,7 +136,7 @@ def build_pwa(app_name=None, base_path=None):
 		"album_art": album_art_path,  # Custom field for script.js to use
 		"icons": [
 			{
-				"src": f"{base_path}{icon_path}",
+				"src": icon_path,
 				"sizes": "640x640",
 				"type": "image/png",
 				"purpose": "any maskable"
@@ -159,9 +144,9 @@ def build_pwa(app_name=None, base_path=None):
 		]
 	}
 
-	with open(SCRIPT_DIR / "manifest.json", 'w', encoding='utf-8') as f:
+	with open(ROOT_DIR / "manifest.json", 'w', encoding='utf-8') as f:
 		json.dump(manifest, f, indent=2)
-	print("✓ Generated manifest.json")
+	log("✓ Generated manifest.json")
 
 	# Build static files list for service worker
 	static_files = [
@@ -183,8 +168,8 @@ def build_pwa(app_name=None, base_path=None):
 
 	AUDIO_EXTS = {".mp3", ".m4a", ".ogg", ".flac", ".wav"}
 	# album_art.jpg and icon.png added explicitly above with a hash; skip to avoid a bare dupe
-	SKIP_NAMES = {"tracks.json", "readme.md", "album_art.jpg", "icon.png"}
-	for path in sorted((SCRIPT_DIR / "mix").iterdir()):
+	SKIP_NAMES = {"tracks.json", "readme.md", "album_art.jpg", "icon.png", "name.txt"}
+	for path in sorted((ROOT_DIR / "mix").iterdir()):
 		if not path.is_file():
 			continue
 		if path.name in SKIP_NAMES:
@@ -330,14 +315,14 @@ self.addEventListener('fetch', (event) => {{
 }});
 '''
 
-	with open(SCRIPT_DIR / "service-worker.js", 'w', encoding='utf-8') as f:
+	with open(ROOT_DIR / "service-worker.js", 'w', encoding='utf-8') as f:
 		f.write(service_worker_content)
-	print("✓ Generated service-worker.js")
-	print()
-	print("PWA build complete!")
+	log("✓ Generated service-worker.js")
+	log()
+	log("PWA build complete!")
+	return app_name
 
 
 if __name__ == "__main__":
-	# When run directly, get configuration and build PWA files
-	app_name, base_path = get_configuration()
-	build_pwa(app_name, base_path)
+	scan.bootstrap(__file__)
+	build_pwa()

@@ -11,9 +11,9 @@ import subprocess
 import json
 from pathlib import Path
 
-SCRIPT_DIR = Path(__file__).parent.absolute()
-VENV_DIR = SCRIPT_DIR / "venv"
-MIX_DIR = SCRIPT_DIR / "mix"
+ROOT_DIR = Path(__file__).parent.parent.absolute()
+VENV_DIR = ROOT_DIR / "venv"
+MIX_DIR = ROOT_DIR / "mix"
 OUTPUT_FILE = MIX_DIR / "tracks.json"
 
 

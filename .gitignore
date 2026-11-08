@@ -1,11 +1,8 @@
 # Python virtual environment
 venv/
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
 
-# Mix folder (audio files, album art, custom CSS/JS)
+# mix folder (audio files, album art, custom CSS/JS, custom home screen icon, name.txt)
 mix/*
 !mix/readme.md
 
@@ -22,6 +19,3 @@ mix/*
 # auto-generated PWA files
 manifest.json
 service-worker.js
-
-# Personal deployment script
-push.py

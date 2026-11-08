@@ -52,7 +52,7 @@ once you install one, it's yours.<br><br>
 
 2. **ship it**
 	- over **your own network** (recommended):
-		- while `./serve.py` is running (with HTTPS enabled), use your phone to scan the QR codes it prints to the console (<a href="#local-network-installation">details</a>). no public host necessary, and nothing ever leaves your network.
+		- while `./serve.py` is running (with HTTPS enabled), use your phone to scan the QR codes it prints to the console. no public host necessary, and nothing ever leaves your network (<a href="#local-network-installation">details</a>).
 	- using a **public host:**
 		- when using media you have distribution rights for, you can upload the entire project directory to any static web host with HTTPS support (GitHub Pages, Neocities, AWS S3, etc).<br>
 		**publishing files you don't have the right to distribute may constitute copyright infringement.**
